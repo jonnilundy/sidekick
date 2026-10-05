@@ -100,7 +100,10 @@ final class PanelController {
         // Only when the user opens it: an answer arriving at 5:01 must not be wiped on its way in.
         if focus, !wantsShown, dailyResetEnabled(), model.conversation.resetIfDue() {
             model.input = ""
+            model.resetVisibility()
         }
+        // Opened by you after a quiet spell: just the empty field. An answer arriving shows as is.
+        if focus, !wantsShown { model.collapseIfIdle() }
         model.conversation.prewarm()
         if focus, let front = NSWorkspace.shared.frontmostApplication, front != .current {
             previousApp = front
@@ -134,6 +137,7 @@ final class PanelController {
     func hide() {
         guard wantsShown else { return }
         wantsShown = false
+        model.touch()
         stopMouseMonitor()
         withAnimation(leaveAnimation) {
             model.shown = false
@@ -170,12 +174,14 @@ final class PanelController {
 
     func newConversation() {
         model.conversation.reset()
+        model.resetVisibility()
         model.input = ""
         model.focusRequest += 1
     }
 
     /// A turn ended. If the panel was put away while it ran, bring it back so the answer is seen.
     func turnEnded() {
+        model.touch()
         if !wantsShown { show(focus: false) }
     }
 

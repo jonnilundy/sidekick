@@ -69,7 +69,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         warmTimer = Timer.scheduledTimer(withTimeInterval: 5 * 60, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self, !self.panel.isVisible else { return }
-                if self.defaults.bool(forKey: Preferences.Key.dailyReset), self.conversation.resetIfDue() { return }
+                if self.defaults.bool(forKey: Preferences.Key.dailyReset), self.conversation.resetIfDue() { self.model.resetVisibility(); return }
                 self.conversation.prewarm()
             }
         }

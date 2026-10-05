@@ -13,7 +13,8 @@ struct PanelView: View {
 
     var body: some View {
         PanelCard(model: model)
-            .frame(width: PanelMetrics.cardWidth)
+            .frame(width: model.isCompact ? PanelMetrics.compactWidth : PanelMetrics.cardWidth)
+            .animation(.spring(response: 0.36, dampingFraction: 0.86), value: model.isCompact)
             .onGeometryChange(for: CGSize.self, of: { $0.size }) { model.onCardSize?($0) }
             .offset(x: model.shown || model.reduceMotion ? 0 : PanelMetrics.cardWidth + PanelMetrics.edgeGap + 24)
             .scaleEffect(model.shown || model.reduceMotion ? 1 : 0.94, anchor: .trailing)
@@ -29,19 +30,27 @@ struct PanelCard: View {
     @Bindable var model: PanelModel
     @FocusState private var focused: Bool
     @State private var transcriptHeight: CGFloat = 0
+    /// The live pull on the grabber, in points (down is positive), before rubber banding.
+    @State private var pull: CGFloat = 0
+    @State private var grabberHover = false
 
     private var conversation: Conversation { model.conversation }
+    private var showsTranscript: Bool { !model.visibleTurns.isEmpty }
+    private var stretch: CGFloat { CGFloat(HistoryDrag.rubberband(Double(pull))) }
 
     var body: some View {
         VStack(spacing: 0) {
-            if !conversation.isEmpty {
+            if showsTranscript {
                 transcript
                     .transition(.opacity.combined(with: .move(edge: .top)))
                 Divider().opacity(0.5)
             }
             inputRow
+            // Pulling down stretches the card under the finger before the history opens.
+            Color.clear.frame(height: max(0, stretch))
         }
-        .animation(.spring(response: Spring.grow.response, dampingFraction: Spring.grow.damping), value: conversation.isEmpty)
+        .overlay(alignment: .bottom) { grabber }
+        .animation(.spring(response: Spring.grow.response, dampingFraction: Spring.grow.damping), value: showsTranscript)
         .background { CardBackground() }
         .clipShape(.rect(cornerRadius: PanelMetrics.cornerRadius, style: .continuous))
         .overlay {
@@ -58,7 +67,7 @@ struct PanelCard: View {
     private var transcript: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                ForEach(conversation.turns) { turn in
+                ForEach(model.visibleTurns) { turn in
                     TurnView(turn: turn, isLast: turn.id == conversation.turns.last?.id)
                 }
             }
@@ -71,7 +80,8 @@ struct PanelCard: View {
         // Only when it really scrolls; otherwise a bar flashes while the card grows.
         .scrollIndicators(transcriptHeight > model.maxTranscriptHeight ? .automatic : .never)
         .defaultScrollAnchor(.bottom, for: .sizeChanges)
-        .frame(height: min(max(transcriptHeight, 1), model.maxTranscriptHeight))
+        // Pushing up on an open history shrinks it under the finger before it tucks away.
+        .frame(height: max(1, min(max(transcriptHeight, 1), model.maxTranscriptHeight) + min(0, stretch)))
         .animation(.spring(response: Spring.grow.response, dampingFraction: Spring.grow.damping), value: transcriptHeight)
     }
 
@@ -93,18 +103,65 @@ struct PanelCard: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 14)
         .frame(minHeight: 52)
+        // The row always lays out at full width and the card's edge clips it while compact, so the text
+        // never wraps at the narrow width and keeps that wrap after the card widens.
+        .frame(width: PanelMetrics.cardWidth, alignment: .leading)
+        // Both bounds: this frame takes the card's width, not the row's, so the row cannot push the card wider.
+        .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
     }
 
     private var placeholder: String {
         if model.showWelcome { return "Ask anything. \(model.shortcutHint) opens me." }
-        return conversation.isEmpty ? "Ask anything" : "Follow up"
+        return showsTranscript ? "Follow up" : "Ask anything"
+    }
+
+    // MARK: Grabber
+
+    /// A small handle on the bottom edge: pull down for earlier questions, push up to tuck them away.
+    @ViewBuilder private var grabber: some View {
+        if model.canPull {
+            // Hidden until the pointer is on the bottom edge, so the card stays clean.
+            Capsule()
+                .fill(.primary.opacity(grabberHover || pull != 0 ? 0.32 : 0))
+                .frame(width: pull != 0 ? 40 : 32, height: 4)
+                .frame(width: 180, height: 16)
+                .contentShape(Rectangle())
+                .offset(y: -1)
+                .onHover { inside in withAnimation(.easeOut(duration: 0.12)) { grabberHover = inside } }
+                .gesture(
+                    DragGesture(minimumDistance: 2, coordinateSpace: .global)
+                        .onChanged { value in pull = value.translation.height }
+                        .onEnded { value in finishPull(translation: value.translation.height, velocity: value.velocity.height) }
+                )
+                .onTapGesture { finishPull(translation: model.historyOpen ? -100 : 100, velocity: 0) }
+                .help(model.historyOpen ? "Push up to hide earlier questions" : "Pull down for earlier questions")
+                .accessibilityLabel(model.historyOpen ? "Hide earlier questions" : "Show earlier questions")
+                .accessibilityAddTraits(.isButton)
+                .transition(.opacity)
+        }
+    }
+
+    private func finishPull(translation: CGFloat, velocity: CGFloat) {
+        let outcome = HistoryDrag.outcome(translation: Double(translation), velocity: Double(velocity), isOpen: model.historyOpen)
+        // A flick hands its speed to the spring, a slow release settles calmly.
+        let animation: Animation = abs(velocity) > 300 ? .spring(response: 0.42, dampingFraction: 0.8) : .spring(response: 0.38, dampingFraction: 1)
+        withAnimation(animation) {
+            switch outcome {
+            case .open: model.showHistory()
+            case .close: model.hideHistory()
+            case .stay: break
+            }
+            pull = 0
+        }
+        model.touch()
+        model.focusRequest += 1
     }
 
     @ViewBuilder private var trailingButton: some View {
         if conversation.isRunning {
             IconButton(symbol: "stop.fill", help: "Stop (⌘.)") { conversation.stop() }
                 .transition(.scale(scale: 0.6).combined(with: .opacity))
-        } else if !conversation.isEmpty {
+        } else if !conversation.isEmpty && !model.isCompact {
             IconButton(symbol: "arrow.counterclockwise", help: "Reset: start a fresh session (⌘N)") { model.onNew?() }
                 .transition(.scale(scale: 0.6).combined(with: .opacity))
         }

@@ -72,6 +72,31 @@ final class Probe: NSObject, NSApplicationDelegate {
         panel.sendEvent(key(36, "\r"))
     }
 
+    /// A real mouse drag on the grabber at the bottom center of the card, in small steps.
+    private func drag(by distance: CGFloat, hold: Bool = false) async {
+        await pause(0.7)  // let the window settle to the card's size
+        let cardWidth = model.isCompact ? PanelMetrics.compactWidth : PanelMetrics.cardWidth
+        let start = NSPoint(x: panel.frame.width - PanelMetrics.edgeGap - cardWidth / 2, y: PanelMetrics.bottom + 6)
+        func mouse(_ type: NSEvent.EventType, _ point: NSPoint) -> NSEvent {
+            NSEvent.mouseEvent(with: type, location: point, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                               windowNumber: panel.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!
+        }
+        panel.sendEvent(mouse(.leftMouseDown, start))
+        let steps = 12
+        for step in 1...steps {
+            await pause(0.016)
+            // Window coordinates grow upward, so a pull down lowers y.
+            panel.sendEvent(mouse(.leftMouseDragged, NSPoint(x: start.x, y: start.y - distance * CGFloat(step) / CGFloat(steps))))
+        }
+        if hold {
+            // Stop before letting go, so the release carries no speed.
+            await pause(0.2)
+            panel.sendEvent(mouse(.leftMouseDragged, NSPoint(x: start.x, y: start.y - distance)))
+        }
+        await pause(0.05)
+        panel.sendEvent(mouse(.leftMouseUp, NSPoint(x: start.x, y: start.y - distance)))
+    }
+
     private func shot(_ name: String) async {
         await pause(0.1)
         let url = outFolder.appendingPathComponent("\(name).png")
@@ -108,6 +133,13 @@ final class Probe: NSObject, NSApplicationDelegate {
         await pause(0.7)
         await shot("1-empty")
         let emptyHeight = panel.frame.height
+        check(model.isCompact, "the empty field is the compact, half-width card")
+        model.input = "a question that needs the full width please"
+        check(!model.isCompact, "longer text widens the card")
+        await pause(0.5)
+        await shot("1b-widened")
+        model.input = ""
+        await pause(0.3)
 
         // Ask through real key events.
         await type("hello")
@@ -190,6 +222,32 @@ final class Probe: NSObject, NSApplicationDelegate {
         app.panel.show()
         check(await until(1) { panel.isVisible }, "it opens after a pause")
         check(conversation.turns.count == 2, "the session is still there after a pause", "\(conversation.turns.count)")
+
+        // After a quiet spell it opens as the empty field; the history is kept and a pull shows it.
+        model.idleCollapseAfter = 0.3
+        app.panel.hide()
+        _ = await until(1.5) { !panel.isVisible }
+        await pause(0.5)
+        app.panel.show()
+        check(await until(1) { panel.isVisible }, "it opens after the quiet spell")
+        check(model.visibleTurns.isEmpty && conversation.turns.count == 2, "quiet spell: empty field, history kept", "visible \(model.visibleTurns.count) of \(conversation.turns.count)")
+        check(model.isCompact, "quiet spell: compact card")
+        await pause(0.8)
+        await shot("10-collapsed")
+        await drag(by: 90)
+        check(await until(1) { model.historyOpen }, "a real drag down on the grabber shows the history")
+        await pause(0.8)
+        await shot("11-pulled-open")
+        await drag(by: -90)
+        check(await until(1) { model.visibleTurns.isEmpty }, "a real drag up tucks it away")
+        await drag(by: 18, hold: true)
+        await pause(0.5)
+        check(model.visibleTurns.isEmpty, "a short pull springs back shut")
+        await type("new after collapse")
+        check(await until(5) { !conversation.isRunning }, "a question after a collapse ends")
+        check(model.visibleTurns.count == 1 && conversation.turns.count == 3, "only the new turn shows; the session keeps all", "\(model.visibleTurns.count) of \(conversation.turns.count)")
+        check(conversation.turns.last?.answer == "Echo: new after collapse (turn 3)", "the session still remembers", conversation.turns.last?.answer ?? "nil")
+        model.idleCollapseAfter = IdleCollapse.defaultAfter
         _ = panel.performKeyEquivalent(with: key(45, "n", .command))
 
         // Errors read clearly; dark mode.

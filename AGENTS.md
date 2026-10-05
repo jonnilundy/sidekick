@@ -13,7 +13,7 @@ A native macOS quick-answer panel (SwiftPM, macOS 15+, Swift 6.4) that runs the 
 
 | Script | What it does | Safe on Jonni's Mac |
 | --- | --- | --- |
-| `scripts/test.sh` | Checks (128, about 10 s) and a compile of the app | Yes |
+| `scripts/test.sh` | Checks (142, about 10 s) and a compile of the app | Yes |
 | `scripts/test.sh --vm` | Then builds the app and runs the window probe in the VM | Yes (the window part runs in the VM) |
 | `$(swift build --show-bin-path)/sidekick-checks --live` | One real question through the real claude. Costs a few cents | Yes, no windows |
 | `scripts/build-app.sh` | Release build into `build/Sidekick.app`, ad hoc signed | Yes |
@@ -34,6 +34,9 @@ A native macOS quick-answer panel (SwiftPM, macOS 15+, Swift 6.4) that runs the 
 - `makeKey()` activates the app even for a `.nonactivatingPanel` on macOS 26. The panel remembers the app that was in front and activates it again on hide (`PanelController.returnFocus`).
 - The card slides with SwiftUI springs inside a window flush with the screen's right edge, so the slide never shows on a second display. `wantsShown` is the truth for show and hide decisions; `model.shown` follows a frame later.
 - SwiftUI skips `withAnimation` completions when nothing changed on screen. `hide()` has a timed fallback.
+- The input row always lays out at full card width and the card clips it while compact (220 pt). A field that wraps at the narrow width keeps that wrap after the card widens.
+- `PanelModel.visibleFrom` hides earlier turns from view only; `Conversation.turns` keeps them all. The grabber decides open or close with `HistoryDrag.outcome` (projection at the 0.99 rate).
+- `scripts/vm-test.sh` stops Notification Center for the run (banners cover the top right) and starts it again on exit.
 - An app without a main menu gets no Edit menu, so the panel maps ⌘X/C/V/A/Z itself.
 - claude in stream-json mode runs SessionStart hooks before the first message and sends `system/init` only after it. Any `system` line counts as "process is up".
 - An interrupt (`control_request` subtype `interrupt`) ends the turn with `is_error: true` and `result: null`; the session survives.

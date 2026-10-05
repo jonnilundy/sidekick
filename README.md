@@ -30,6 +30,8 @@ While an answer runs, the panel stays up. If you put it away, it comes back when
 
 One session runs all day, so follow-ups know the earlier questions. It resets at 5 AM. Nothing is saved to disk.
 
+After 3 minutes without activity, the panel opens as just the empty field, half width. The session keeps every turn: hover on the bottom edge of the card and drag down to pull the earlier questions back into view, or drag up to tuck them away.
+
 ## Settings
 
 - **Shortcut.** Default ⌥⌘Space.

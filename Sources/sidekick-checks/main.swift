@@ -246,6 +246,27 @@ do {
     check(slow.value.isFinite && abs(slow.value) < 200, "spring is stable on a late frame", "\(slow.value)")
 }
 
+// MARK: History drag and idle collapse
+
+do {
+    check(HistoryDrag.rubberband(0) == 0, "rubber band at rest")
+    let small = HistoryDrag.rubberband(20), big = HistoryDrag.rubberband(600)
+    check(small > 9 && small < 11.5, "rubber band starts at about half the pull", "\(small)")
+    check(big < 300 && big > 100, "rubber band resists far out", "\(big)")
+    check(HistoryDrag.rubberband(-50) == -HistoryDrag.rubberband(50), "rubber band is symmetric")
+    check(HistoryDrag.outcome(translation: 60, velocity: 0, isOpen: false) == .open, "a long pull opens")
+    check(HistoryDrag.outcome(translation: 12, velocity: 0, isOpen: false) == .stay, "a short pull springs back")
+    check(HistoryDrag.outcome(translation: 12, velocity: 400, isOpen: false) == .open, "a short flick down opens")
+    check(HistoryDrag.outcome(translation: 30, velocity: -900, isOpen: false) == .stay, "a pull flicked back stays shut")
+    check(HistoryDrag.outcome(translation: 18, velocity: 95, isOpen: false) == .stay, "a gentle short pull stays shut")
+    check(HistoryDrag.outcome(translation: -60, velocity: 0, isOpen: true) == .close, "a push up closes")
+    check(HistoryDrag.outcome(translation: 80, velocity: 0, isOpen: true) == .stay, "pulling an open history keeps it open")
+    let now = Date()
+    check(!IdleCollapse.isDue(lastActivity: nil, now: now), "no activity yet: nothing to collapse")
+    check(!IdleCollapse.isDue(lastActivity: now.addingTimeInterval(-179), now: now), "under 3 minutes: history stays")
+    check(IdleCollapse.isDue(lastActivity: now.addingTimeInterval(-180), now: now), "3 minutes idle: empty field")
+}
+
 // MARK: Daily reset
 
 do {
