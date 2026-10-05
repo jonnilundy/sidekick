@@ -22,9 +22,6 @@ enum PanelMotion {
     static let unfold = Animation.spring(response: 0.42, dampingFraction: 0.88)
     /// Transcript height changes.
     static let grow = Animation.spring(response: Spring.grow.response, dampingFraction: Spring.grow.damping)
-    /// Pull release after a flick, and after a slow release.
-    static let pullFlick = Animation.spring(response: 0.42, dampingFraction: 0.8)
-    static let pullSettle = Animation.spring(response: 0.38, dampingFraction: 1)
     /// Button press feedback.
     static let press = Animation.spring(response: 0.16, dampingFraction: 1)
     /// A details section opening or closing.
@@ -188,8 +185,18 @@ struct PanelCard: View {
 
     private func finishPull(translation: CGFloat, velocity: CGFloat) {
         let outcome = HistoryDrag.outcome(translation: Double(translation), velocity: Double(velocity), isOpen: model.historyOpen)
-        // A flick hands its speed to the spring, a slow release settles calmly.
-        let animation: Animation = model.reduceMotion ? PanelMotion.fadeIn : (abs(velocity) > 300 ? PanelMotion.pullFlick : PanelMotion.pullSettle)
+        // Hand the finger's speed to the spring, so there is no seam between the drag and the motion.
+        // Opening or closing moves about a screenful of history; springing back moves the stretch.
+        let distance: CGFloat
+        switch outcome {
+        case .open: distance = max(120, min(model.maxTranscriptHeight, 400))
+        case .close: distance = -max(120, min(transcriptHeight, model.maxTranscriptHeight))
+        case .stay: distance = -stretch
+        }
+        let relative = abs(distance) < 1 ? 0 : max(-12, min(12, velocity / distance))
+        let animation: Animation = model.reduceMotion
+            ? PanelMotion.fadeIn
+            : .interpolatingSpring(duration: 0.4, bounce: abs(velocity) > 300 ? 0.15 : 0, initialVelocity: relative)
         withAnimation(animation) {
             switch outcome {
             case .open: model.showHistory()
