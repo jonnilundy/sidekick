@@ -21,6 +21,8 @@ final class PanelModel {
     var showWelcome = false
 
     @ObservationIgnored var onSubmit: (() -> Void)?
+    /// True when the daily reset is on. Checked on submit too, for a panel left open across 5 AM.
+    @ObservationIgnored var dailyResetEnabled: () -> Bool = { true }
     @ObservationIgnored var onHide: (() -> Void)?
     @ObservationIgnored var onNew: (() -> Void)?
     /// The card's full size from layout (target values, not the animated ones).
@@ -35,6 +37,7 @@ final class PanelModel {
         guard !text.isEmpty, !conversation.isRunning else { return }
         input = ""
         showWelcome = false
+        if dailyResetEnabled() { conversation.resetIfDue() }
         conversation.ask(text)
         onSubmit?()
     }

@@ -1,6 +1,6 @@
 # Sidekick
 
-A native macOS quick-answer panel (SwiftPM, macOS 15+, Swift 6.4) that runs the user's `claude` CLI. Private repo. It runs Claude Code on the user's own login, so do not distribute builds.
+A native macOS quick-answer panel (SwiftPM, macOS 15+, Swift 6.4) that runs the user's `claude` CLI. Private repo. It runs Claude Code on the user's own login, so builds are for Jonni only: releases go to this private repo's GitHub releases, never anywhere public.
 
 ## Layout
 

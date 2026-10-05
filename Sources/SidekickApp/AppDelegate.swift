@@ -57,6 +57,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         conversation.onTurnEnded = { [weak self] in self?.panel.turnEnded() }
         panel.onOpenSettings = { [weak self] in self?.openSettings() }
         panel.dailyResetEnabled = { [defaults] in defaults.bool(forKey: Preferences.Key.dailyReset) }
+        model.dailyResetEnabled = panel.dailyResetEnabled
         panel.onVisibilityChange = { [weak self] visible in self?.updateStatusIcon(visible: visible) }
         model.shortcutHint = KeyboardShortcuts.getShortcut(for: .togglePanel)?.description ?? "Your shortcut"
 
