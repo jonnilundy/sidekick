@@ -18,6 +18,7 @@ A native macOS quick-answer panel (SwiftPM, macOS 15+, Swift 6.4) that runs the 
 | `$(swift build --show-bin-path)/sidekick-checks --live` | One real question through the real claude. Costs a few cents | Yes, no windows |
 | `scripts/build-app.sh` | Release build into `build/Sidekick.app`, ad hoc signed | Yes |
 | `scripts/vm-run.sh 'scripts/vm-test.sh worst'` | The break-ui pass: worst-case questions and answers (long paste, empty, blank, error, a 34K answer, 40 turns), screenshots and main-thread stall timings | Yes |
+| `scripts/vm-run.sh 'scripts/vm-demo.sh'` | Records the README demo take (`Sidekick --demo`, fake-claude with `FAKE_CLAUDE_DEMO=1`): `build/vm-out/demo.mov` and full screen stills. The script header has the ffmpeg steps that make `assets/demo.mp4`, `demo.gif` and `screenshot-dark.png`. Sets the Resend wallpaper `8-c` in the VM first | Yes |
 | `scripts/vm-run.sh ['cmd']` | Syncs the repo and the built app to the Tart VM on iris-agi and runs `scripts/vm-test.sh` (or `cmd`). Results land in `build/vm-out/` | Yes |
 | `scripts/install.sh` | Builds, quits the running copy, installs to `/Applications`, starts it | Installs the real app |
 | `scripts/release.sh X.Y.Z [--publish]` | Bumps the version, tests, builds, zips, signs the zip with the Sparkle key from 1Password and puts it first in `appcast.xml`. A dry run undoes the bump and keeps `build/appcast-preview.xml`; `--publish` commits, tags, pushes and creates the GitHub release | Dry run by default |

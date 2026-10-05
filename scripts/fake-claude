@@ -12,10 +12,13 @@ The lines it prints have the same shape as the real CLI (2.1.x). What it does de
   other    "Echo: <question> (turn N)"
 FAKE_CLAUDE_LOG, when set, gets one line with the arguments and one per message.
 FAKE_CLAUDE_DELAY scales every pause (default 1).
+FAKE_CLAUDE_DEMO=1 answers the README demo questions (see DEMO) with real looking answers, streamed
+in small chunks. The question text shows on screen, so the match is on the natural question.
 """
-import json, os, sys, threading, time
+import json, os, random, sys, threading, time
 
 DELAY = float(os.environ.get("FAKE_CLAUDE_DELAY", "1"))
+DEMO_MODE = os.environ.get("FAKE_CLAUDE_DEMO") == "1"
 SESSION = "00000000-0000-4000-8000-000000000000"
 LOG = os.environ.get("FAKE_CLAUDE_LOG")
 lock = threading.Lock()
@@ -192,6 +195,65 @@ WORST_BIG = "\n\n".join(
 ) + "\n\n" + "\n".join(f"- item {i} of the long list" for i in range(150))
 
 
+# The README demo (FAKE_CLAUDE_DEMO=1): (words the question must hold, web search query or None, answer).
+DEMO = [
+    (("time difference", "san francisco", "tokyo"), "SF Tokyo time difference",
+     """Tokyo is **16 hours ahead** of San Francisco right now.
+
+Worth knowing:
+- The gap becomes **17 hours** when the US ends daylight saving on Nov 1.
+- 9 AM in SF is 1 AM the next day in Tokyo.
+- Japan does not observe daylight saving.
+"""),
+    (("best time", "call"), None,
+     """Late afternoon in SF: **4 to 6 PM** there is **8 to 10 AM** the next day in Tokyo.
+
+| San Francisco | Tokyo, next day |
+| --- | --- |
+| 4 PM | 8 AM |
+| 5 PM | 9 AM |
+| 6 PM | 10 AM |
+
+Worth knowing:
+- After Nov 1 the same Tokyo hours start at **3 PM** in SF.
+- Fridays in SF land on Saturday morning in Tokyo.
+"""),
+]
+
+
+def demo_answer(q):
+    """Streams a demo answer when the question matches one. Returns False when none does."""
+    for words, query, body in DEMO:
+        if not all(word in q for word in words):
+            continue
+        index = 0
+        if query:
+            stream({"type": "content_block_start", "index": 0, "content_block": {"type": "tool_use", "id": "toolu_demo", "name": "WebSearch", "input": {}}})
+            stream({"type": "content_block_delta", "index": 0, "delta": {"type": "input_json_delta", "partial_json": json.dumps({"query": query})}})
+            stream({"type": "content_block_stop", "index": 0})
+            pause(0.9)
+            index = 1
+        else:
+            pause(0.5)
+        # Small uneven chunks with small gaps, like a fast model's stream. Seeded, so takes repeat.
+        # A **bold** or `code` span goes out whole, so no raw asterisks flash on screen.
+        rng = random.Random(len(body))
+        chunks, at = [], 0
+        while at < len(body):
+            end = at + rng.randint(2, 7)
+            for mark in ("**", "`"):
+                start = body.find(mark, at, end)
+                if start != -1 and not body.startswith("```", start):
+                    close = body.find(mark, start + len(mark))
+                    end = max(end, close + len(mark)) if close != -1 else end
+            chunks.append(body[at:end])
+            at = end
+        text_block(index, chunks, gap=0.022)
+        result(body)
+        return True
+    return False
+
+
 def answer(question, turn):
     interrupted.clear()
     emit({"type": "system", "subtype": "init", "cwd": os.getcwd(), "tools": ["Read", "WebSearch"], "parent_tool_use_id": None})
@@ -199,6 +261,8 @@ def answer(question, turn):
     emit({"type": "stream_event", "parent_tool_use_id": "toolu_sub", "event": {"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": "SUBAGENT TEXT"}}})
     stream({"type": "message_start", "message": {"model": "claude-fake-9-9", "role": "assistant", "content": []}})
     q = question.lower()
+    if DEMO_MODE and demo_answer(q):
+        return
     if "crash" in q:
         sys.stderr.write("fake-claude: crashed on purpose\n")
         sys.stderr.flush()
