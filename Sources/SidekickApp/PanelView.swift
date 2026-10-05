@@ -41,7 +41,7 @@ struct PanelView: View {
     var body: some View {
         PanelCard(model: model)
             .frame(width: model.isCompact ? PanelMetrics.compactWidth : PanelMetrics.cardWidth)
-            .animation(PanelMotion.unfold, value: model.isCompact)
+            .animation(model.reduceMotion ? nil : PanelMotion.unfold, value: model.isCompact)
             .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { model.onCardFrame?($0) }
             // On and off the screen edge by sliding only: the window ends at the edge and clips the card.
             // Reduced motion swaps the slide for a short fade.
@@ -100,7 +100,7 @@ struct PanelCard: View {
                 ForEach(model.visibleTurns) { turn in
                     TurnView(turn: turn, isLast: turn.id == conversation.turns.last?.id)
                         // Only the question just sent rises; turns revealed by the pull fade in where they are.
-                        .transition(isJustSent(turn) ? PanelMotion.rise : .opacity)
+                        .transition(model.reduceMotion ? .opacity : (isJustSent(turn) ? PanelMotion.rise : .opacity))
                 }
             }
             .padding(.horizontal, 18)
@@ -115,7 +115,7 @@ struct PanelCard: View {
         // Pushing up on an open history shrinks it under the finger before it tucks away.
         .frame(height: showsTranscript ? max(1, min(max(transcriptHeight, 1), model.maxTranscriptHeight) + min(0, stretch)) : 0)
         .clipped()
-        .animation(PanelMotion.grow, value: transcriptHeight)
+        .animation(model.reduceMotion ? nil : PanelMotion.grow, value: transcriptHeight)
     }
 
     // MARK: Input
@@ -129,7 +129,7 @@ struct PanelCard: View {
                 .lineLimit(1...6)
                 .focused($focused)
                 .tint(.sidekick)
-                .onSubmit { withAnimation(PanelMotion.unfold) { model.submit() } }
+                .onSubmit { withAnimation(model.reduceMotion ? PanelMotion.fadeIn : PanelMotion.unfold) { model.submit() } }
                 .accessibilityIdentifier("sidekick-input")
             trailingButton
         }
@@ -177,7 +177,7 @@ struct PanelCard: View {
     private func finishPull(translation: CGFloat, velocity: CGFloat) {
         let outcome = HistoryDrag.outcome(translation: Double(translation), velocity: Double(velocity), isOpen: model.historyOpen)
         // A flick hands its speed to the spring, a slow release settles calmly.
-        let animation: Animation = abs(velocity) > 300 ? PanelMotion.pullFlick : PanelMotion.pullSettle
+        let animation: Animation = model.reduceMotion ? PanelMotion.fadeIn : (abs(velocity) > 300 ? PanelMotion.pullFlick : PanelMotion.pullSettle)
         withAnimation(animation) {
             switch outcome {
             case .open: model.showHistory()
