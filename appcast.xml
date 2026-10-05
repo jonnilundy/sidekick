@@ -6,6 +6,25 @@
         <description>Sidekick updates</description>
         <language>en</language>
         <item>
+            <title>Version 0.2.1</title>
+            <pubDate>Mon, 05 Oct 2026 21:22:06 +0000</pubDate>
+            <sparkle:version>3</sparkle:version>
+            <sparkle:shortVersionString>0.2.1</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
+            <sparkle:fullReleaseNotesLink>https://github.com/jonnilundy/sidekick/releases/tag/v0.2.1</sparkle:fullReleaseNotesLink>
+            <description sparkle:format="markdown"><![CDATA[Fixes from a stress test with worst-case data.
+
+- An empty answer now says "No answer came back." instead of showing nothing.
+- Click a long question's bubble to read all of it; click again to shorten it.
+- Wide tables fade at the right edge, so you can see there is more to scroll.
+- ⌘↓ shows earlier questions and ⌘↑ hides them. VoiceOver can reach them too.
+- While an answer streams, a half-arrived `**`, `~~` or backtick stays hidden until it closes.
+- Numbered lists that start at 1000 or more render as lists.
+- Long lists stream more smoothly.
+- Fixed a crash when a `<details>` section arrived cut off mid-stream.]]></description>
+            <enclosure url="https://github.com/jonnilundy/sidekick/releases/download/v0.2.1/Sidekick-0.2.1.zip" length="2002559" type="application/octet-stream" sparkle:edSignature="Z1nMEJjVNAMwFF22xcS5hZyFdD2hdnX6wlIngxR75DoWWoa+q9ODGtki46S5+wIuh7PSwwizk1J2n256r6yJDw=="/>
+        </item>
+        <item>
             <title>Version 0.2.0</title>
             <pubDate>Mon, 05 Oct 2026 19:34:29 +0000</pubDate>
             <sparkle:version>2</sparkle:version>
