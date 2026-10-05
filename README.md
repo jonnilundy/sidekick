@@ -1,64 +1,91 @@
+<p align="center"><img src="assets/screenshot-dark.png" alt="Sidekick's black card at the top right of a Mac screen, answering a git question with a one line answer and a code block" width="560"></p>
+
 # Sidekick
 
-A quick-answer panel for Claude on your Mac. Press ⌥⌘Space, ask, read the answer, press Esc. Nothing else.
+Sidekick is a quick-answer panel for Claude that slides in and gets out of your way.
 
-Sidekick runs your own `claude` command, so it has your setup: your CLAUDE.md, skills, connectors, hooks and login. It answers in a line or three, then at most a few "worth knowing" bullets.
+[![Latest release](https://img.shields.io/github/v/release/jonnilundy/sidekick)](https://github.com/jonnilundy/sidekick/releases/latest)
+[![macOS 15+](https://img.shields.io/badge/macOS-15%2B-black)](#install)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+
+Press ⌥⌘Space, type a question, press Return. The answer comes first, in a line or three, then at most a few "worth knowing" bullets. Press Esc and you are back where you were. It is for the small questions that do not deserve a full session in a full app.
+
+Sidekick runs your own `claude` command, so it has your whole setup: your CLAUDE.md, skills, connectors, hooks and login. No API key, no account, no server. Conversations are never saved to disk.
 
 ## Install
 
+1. Download `Sidekick-<version>.zip` from the [latest release](https://github.com/jonnilundy/sidekick/releases/latest) and open it.
+2. Drag Sidekick to Applications.
+3. Right click Sidekick in Applications, choose Open, then click Open. macOS asks this once, because the app is not signed with an Apple developer certificate.
+4. If macOS still refuses, open System Settings, go to Privacy & Security, and click Open Anyway next to Sidekick.
+
+Sidekick needs [Claude Code](https://claude.com/claude-code) installed and logged in: `claude` must work in Terminal. On the first start Sidekick turns on Open at Login and opens once to show its shortcut. A ✦ appears in the menu bar.
+
+### Build from source
+
 ```sh
+git clone https://github.com/jonnilundy/sidekick.git
+cd sidekick
 scripts/install.sh
 ```
 
-This builds the app, installs it to `/Applications/Sidekick.app` and starts it. On the first start it turns on Open at Login and opens the panel once.
+Needs macOS 15 and Swift 6 (Xcode or its Command Line Tools). The script builds a release, puts `Sidekick.app` in `/Applications` and starts it.
 
-You need Claude Code installed and logged in (`claude` in Terminal works).
+## Usage
 
-## Use
+<img src="assets/demo.gif" alt="Option Command Space slides a compact field in from the right edge. A question about the time difference between San Francisco and Tokyo is typed; the card unfolds, the question flies into a bubble, a short web search shows, and the answer streams in with three bullets. A follow-up adds a small table. Escape slides the card away. Reopened later, it is just the field again, and dragging its bottom edge down brings the earlier questions back." width="100%">
+
+[Watch it as a video (MP4)](assets/demo.mp4)
 
 | Do this | To |
 | --- | --- |
 | ⌥⌘Space, or click ✦ in the menu bar | Open or close the panel |
 | Return | Ask |
-| Esc, ⌘W, or click another app | Put it away (the session stays) |
+| Esc, ⌘W, or click another app | Put it away |
 | ⌘N, or the ↺ button | Reset: start a fresh session |
 | ⌘. | Stop the answer |
 | ⇧⌘C | Copy the last answer |
-| ⌘, or right-click ✦ | Settings |
+| ⌘, or right click ✦ | Settings |
 
-While an answer runs, the panel stays up. If you put it away, it comes back when the answer is done, without taking your keyboard.
-
-One session runs all day, so follow-ups know the earlier questions. It resets at 5 AM. Nothing is saved to disk.
-
-After 3 minutes without activity, the panel opens as just the empty field, half width. The session keeps every turn: hover on the bottom edge of the card and drag down to pull the earlier questions back into view, or drag up to tuck them away.
+- **One session all day.** Follow-ups know the earlier questions. It starts fresh at 5 AM, or whenever you press ⌘N.
+- **Out of the way.** While an answer runs, the panel stays up. If you put it away, it comes back when the answer is done, without taking your keyboard. Esc gives the keyboard back to the app you were in.
+- **Quiet when you come back.** After 3 minutes without activity, the panel opens as just the empty field. Hover the bottom edge of the card and drag down to pull the earlier questions back into view, or drag up to tuck them away.
+- **Real markdown.** Lists, tables, code with colors, quotes, GitHub alerts, footnotes and math render properly while the answer streams.
+- **Your login, never a key.** Sidekick removes `ANTHROPIC_API_KEY` and `ANTHROPIC_AUTH_TOKEN` before it starts `claude`, so answers always use your Claude Code login.
 
 ## Settings
 
 - **Shortcut.** Default ⌥⌘Space.
-- **Folder.** Where claude runs. Default `~/Workbench/work` if it exists, else your home folder.
-- **Model and effort.** Default: your Claude Code model, low effort (fastest). The model names always run the newest model of each family; Settings shows which one gave the last answer.
+- **Folder.** Where `claude` runs, so its project CLAUDE.md and files apply. Default: your home folder.
+- **Model and effort.** Default: your Claude Code model at low effort, the fastest. The model names (Haiku, Sonnet, Opus, Fable) always run the newest model of each family; Settings shows which one gave the last answer.
 - **Start fresh every day at 5 AM.** On by default.
-- **Keep Claude ready.** One claude process waits in the background, so the first answer starts about 2 seconds sooner.
+- **Keep Claude ready.** One `claude` process waits in the background, so the first answer starts about 2 seconds sooner.
 - **Open at login.**
-- **Updates.** Your version, Check Now with the result of the last check, and Check for updates automatically (on by default).
+- **Updates.** Your version, Check Now, and Check for updates automatically (on by default).
 
 ## Updates
 
-Sidekick updates itself with [Sparkle](https://sparkle-project.org). It checks once a day, plus right after launch when a check is due.
+Sidekick updates itself with [Sparkle](https://sparkle-project.org). It checks once a day.
 
-- A found update never opens a window or takes the keyboard. A dot appears on ✦ in the menu bar, and the right-click menu gets **Update to Sidekick X.Y.Z…** at the top.
-- That item, **Check for Updates…** in the same menu, or Check Now in Settings opens Sparkle's window: the release notes, then Install Update, the download, and Install and Relaunch.
-- If you tick "Automatically download and install updates" in that window, later updates download in the background. The menu item then says **Install Sidekick X.Y.Z and Relaunch** and installs at once. An update that is not installed by hand installs when Sidekick quits.
-
-The feed is `appcast.xml` at the root of this repo, read from `main`. The zips are on the repo's GitHub releases. Every zip is signed with an EdDSA key, and Sidekick installs only zips that match the public key in its Info.plist. `scripts/release.sh` makes a release (see [AGENTS.md](AGENTS.md)).
+- A found update never opens a window or takes the keyboard. A dot appears on ✦, and its right click menu gets **Update to Sidekick X.Y.Z…** at the top.
+- That item, **Check for Updates…** in the same menu, or Check Now in Settings opens Sparkle's window with the release notes and Install Update.
+- Every update is a zip on this repo's GitHub releases, signed with an EdDSA key. Sidekick installs only zips that match the public key in its Info.plist.
 
 ## How it works
 
 - One `claude -p --input-format stream-json --output-format stream-json --no-session-persistence` process per session. Questions go in on stdin; text streams back.
 - A spare process starts ahead of time, so asking skips Claude Code's startup.
-- An app started at login gets a bare environment, so Sidekick reads your login shell's environment once (`$SHELL -lic env`) and passes it to claude. Hooks and MCP servers then find their tools and tokens.
-- The prompt Sidekick adds is in `Sources/SidekickCore/ClaudeCommand.swift`.
+- An app started at login gets a bare environment, so Sidekick reads your login shell's environment once (`$SHELL -lic env`) and passes it to `claude`. Hooks and MCP servers then find their tools and tokens.
+- Sidekick adds a short prompt that asks for the answer first and no essays. It is in [`Sources/SidekickCore/ClaudeCommand.swift`](Sources/SidekickCore/ClaudeCommand.swift).
 
-## Develop
+## Contributing
 
-See [AGENTS.md](AGENTS.md) for the scripts and the test rules.
+```sh
+scripts/test.sh
+```
+
+The checks run in about 10 seconds and need no windows and no real `claude`: a stand-in (`scripts/fake-claude`) answers with the same stream format. Window tests, the demo and the update test run in a macOS VM. [AGENTS.md](AGENTS.md) lists every script and the test rules.
+
+## License
+
+MIT. See [LICENSE](LICENSE).

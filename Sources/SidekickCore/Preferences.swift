@@ -12,11 +12,9 @@ public struct Preferences: Sendable {
         public static let lastModel = "lastModel"
     }
 
-    /// The folder claude runs in. Default: ~/Workbench/work when it exists, else the home folder.
+    /// The folder claude runs in until the user picks one in Settings: the home folder.
     public static func defaultFolder(home: String = NSHomeDirectory()) -> String {
-        let work = "\(home)/Workbench/work"
-        var isDir: ObjCBool = false
-        return FileManager.default.fileExists(atPath: work, isDirectory: &isDir) && isDir.boolValue ? work : home
+        home
     }
 
     /// Models offered in Settings. The ids are Claude Code's aliases, which always point at the newest
