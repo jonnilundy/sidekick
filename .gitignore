@@ -1,0 +1,6 @@
+.build/
+build/
+out/
+.swiftpm/
+*.xcodeproj
+.DS_Store

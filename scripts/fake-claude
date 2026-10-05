@@ -1,0 +1,150 @@
+#!/usr/bin/env python3
+"""A stand-in for `claude -p --input-format stream-json --output-format stream-json`.
+
+Checks and the VM test point SIDEKICK_CLAUDE_PATH here, so they run without a login, a network or cost.
+The lines it prints have the same shape as the real CLI (2.1.x). What it does depends on the question:
+  "slow"   streams 40 words slowly, stops early on an interrupt control_request
+  "tool"   runs a fake WebSearch first, then answers
+  "fail"   ends the turn with is_error and a message
+  "crash"  writes to stderr and exits 2
+  "long"   a long markdown answer (list, code block, table)
+  other    "Echo: <question> (turn N)"
+FAKE_CLAUDE_LOG, when set, gets one line with the arguments and one per message.
+FAKE_CLAUDE_DELAY scales every pause (default 1).
+"""
+import json, os, sys, threading, time
+
+DELAY = float(os.environ.get("FAKE_CLAUDE_DELAY", "1"))
+SESSION = "00000000-0000-4000-8000-000000000000"
+LOG = os.environ.get("FAKE_CLAUDE_LOG")
+lock = threading.Lock()
+interrupted = threading.Event()
+
+
+def log(text):
+    if LOG:
+        with open(LOG, "a") as f:
+            f.write(text + "\n")
+
+
+def emit(obj):
+    obj.setdefault("session_id", SESSION)
+    with lock:
+        sys.stdout.write(json.dumps(obj) + "\n")
+        sys.stdout.flush()
+
+
+def stream(event):
+    emit({"type": "stream_event", "event": event, "parent_tool_use_id": None})
+
+
+def pause(seconds):
+    time.sleep(seconds * DELAY)
+
+
+def text_block(index, words, gap=0.0):
+    stream({"type": "content_block_start", "index": index, "content_block": {"type": "text", "text": ""}})
+    for word in words:
+        if interrupted.is_set():
+            break
+        stream({"type": "content_block_delta", "index": index, "delta": {"type": "text_delta", "text": word}})
+        if gap:
+            pause(gap)
+    stream({"type": "content_block_stop", "index": index})
+
+
+def result(text, is_error=False, subtype="success"):
+    emit({"type": "result", "subtype": subtype, "is_error": is_error, "result": text, "duration_ms": 10})
+
+
+LONG = """Use `git worktree add` for each task.
+
+Worth knowing:
+- Each worktree has its own branch.
+- Remove it with `git worktree remove` after the merge.
+- Prune stale ones with `git worktree prune`.
+
+```
+git -C repo worktree add ../repo-wt/task -b feat/task origin/main
+```
+
+| Command | What it does |
+| --- | --- |
+| add | new worktree |
+| prune | clean up |
+"""
+
+
+def answer(question, turn):
+    interrupted.clear()
+    emit({"type": "system", "subtype": "init", "cwd": os.getcwd(), "tools": ["Read", "WebSearch"], "parent_tool_use_id": None})
+    # A subagent line must be ignored by the app.
+    emit({"type": "stream_event", "parent_tool_use_id": "toolu_sub", "event": {"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": "SUBAGENT TEXT"}}})
+    stream({"type": "message_start", "message": {"role": "assistant", "content": []}})
+    q = question.lower()
+    if "crash" in q:
+        sys.stderr.write("fake-claude: crashed on purpose\n")
+        sys.stderr.flush()
+        os._exit(2)
+    if "fail" in q:
+        pause(0.1)
+        result("Not logged in. Run claude in Terminal and log in.", is_error=True, subtype="error_during_execution")
+        return
+    if "tool" in q:
+        stream({"type": "content_block_start", "index": 0, "content_block": {"type": "tool_use", "id": "toolu_1", "name": "WebSearch", "input": {}}})
+        stream({"type": "content_block_delta", "index": 0, "delta": {"type": "input_json_delta", "partial_json": "{\"query\": \"swift "}})
+        stream({"type": "content_block_delta", "index": 0, "delta": {"type": "input_json_delta", "partial_json": "release date\"}"}})
+        stream({"type": "content_block_stop", "index": 0})
+        pause(0.6)
+        text_block(1, ["Swift 6.4 ", "shipped ", "in 2026."])
+        result("Swift 6.4 shipped in 2026.")
+        return
+    if "slow" in q:
+        words = [f"word{i} " for i in range(40)]
+        text_block(0, words, gap=0.08)
+        if interrupted.is_set():
+            result(None, is_error=True, subtype="error_during_execution")
+        else:
+            result("".join(words))
+        return
+    if "long" in q:
+        chunks = [LONG[i:i + 12] for i in range(0, len(LONG), 12)]
+        text_block(0, chunks, gap=0.02)
+        result(LONG)
+        return
+    pause(0.15)
+    reply = f"Echo: {question} (turn {turn})"
+    text_block(0, [reply[:6], reply[6:]])
+    result(reply)
+
+
+def main():
+    log("args " + json.dumps(sys.argv[1:]) + " cwd " + os.getcwd())
+    # Real claude runs SessionStart hooks before the first message arrives.
+    emit({"type": "system", "subtype": "hook_started", "hook_name": "SessionStart:startup"})
+    turn = 0
+    worker = None
+    for line in sys.stdin:
+        line = line.strip()
+        if not line:
+            continue
+        message = json.loads(line)
+        if message.get("type") == "control_request":
+            log("interrupt")
+            interrupted.set()
+            emit({"type": "control_response", "response": {"subtype": "success", "request_id": message.get("request_id")}})
+            continue
+        if message.get("type") == "user":
+            if worker:
+                worker.join()
+            turn += 1
+            question = message["message"]["content"]
+            log("user " + question)
+            worker = threading.Thread(target=answer, args=(question, turn))
+            worker.start()
+    if worker:
+        worker.join()
+    log("eof")
+
+
+main()

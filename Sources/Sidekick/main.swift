@@ -1,0 +1,3 @@
+import SidekickApp
+
+Launch.run()
