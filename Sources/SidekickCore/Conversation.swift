@@ -26,6 +26,10 @@ public final class Conversation {
     /// Set when claude cannot start at all (not installed, folder missing). Shown instead of an answer.
     public private(set) var setupProblem: String?
 
+    /// The model that gave the last answer, as claude reported it.
+    public private(set) var lastModel: String?
+    @ObservationIgnored public var onModel: ((String) -> Void)?
+
     /// When the first question of this session was asked. Nil while empty.
     public private(set) var startedAt: Date?
 
@@ -209,6 +213,8 @@ public final class Conversation {
         switch event {
         case .ready:
             break
+        case .model(let id):
+            if lastModel != id { lastModel = id; onModel?(id) }
         case .text(let text):
             turns[index].answer += text
             turns[index].activity = nil

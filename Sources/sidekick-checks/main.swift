@@ -69,6 +69,15 @@ do {
     check(p2.feed(Data("not json\n{}\n".utf8)).isEmpty, "parser ignores junk lines")
 }
 
+check(ModelName.display("claude-sonnet-5-5") == "Sonnet 5.5", "model name for Sonnet 5.5")
+check(ModelName.display("claude-haiku-4-5-20251001") == "Haiku 4.5", "model name drops the date")
+check(ModelName.display("claude-fable-5-1") == "Fable 5.1", "model name for Fable")
+check(ModelName.display("gpt-x") == "gpt-x", "unknown ids pass through")
+do {
+    var parser = StreamParser()
+    let start = parser.feed(Data(#"{"type":"stream_event","event":{"type":"message_start","message":{"model":"claude-opus-5-5","content":[]}},"parent_tool_use_id":null}"#.utf8 + [0x0A]))
+    check(start == [.model("claude-opus-5-5")], "parser reports the answering model")
+}
 check(ToolLabel.label(name: "WebSearch", detail: "swift 6") == "Searching the web: swift 6", "tool label for web search")
 check(ToolLabel.label(name: "Bash", detail: "rm -rf x") == "Running a command", "tool label hides commands")
 check(ToolLabel.label(name: "mcp__claude_ai_Linear__list_issues", detail: nil) == "Using claude", "tool label for MCP", ToolLabel.label(name: "mcp__claude_ai_Linear__list_issues", detail: nil))
@@ -140,6 +149,9 @@ do {
     - one
     - two
       wrapped
+      - nested
+    - [x] done
+    - [ ] open
     1. first
     2. second
 
@@ -152,15 +164,53 @@ do {
     > quoted
     """)
     check(blocks.first == .paragraph("The answer is **42**."), "markdown paragraph", "\(blocks)")
-    check(blocks.contains(.bullets(["one", "two wrapped"])), "markdown bullets with a wrapped line", "\(blocks)")
-    check(blocks.contains(.numbered(start: 1, items: ["first", "second"])), "markdown numbered list", "\(blocks)")
+    check(blocks.contains(.list([
+        ListItem(level: 0, marker: .bullet, text: "one"),
+        ListItem(level: 0, marker: .bullet, text: "two wrapped"),
+        ListItem(level: 1, marker: .bullet, text: "nested"),
+        ListItem(level: 0, marker: .task(done: true), text: "done"),
+        ListItem(level: 0, marker: .task(done: false), text: "open"),
+        ListItem(level: 0, marker: .number(1), text: "first"),
+        ListItem(level: 0, marker: .number(2), text: "second"),
+    ])), "markdown lists: wrapped, nested, tasks, numbered", "\(blocks)")
     check(blocks.contains(.code(language: "swift", text: "let x = 1")), "markdown code block")
     check(blocks.contains(.table([["a", "b"]])), "markdown table drops the rule line", "\(blocks)")
-    check(Markdown.blocks("| x | y |\n|:--|--:|\n| 1 | 2 |") == [.table([["x", "y"], ["1", "2"]])], "markdown table rows")
     check(blocks.contains(.heading(level: 1, text: "Big")), "markdown heading")
-    check(blocks.last == .quote("quoted"), "markdown quote")
+    check(blocks.last == .quote([.paragraph("quoted")]), "markdown quote", "\(String(describing: blocks.last))")
     check(Markdown.blocks("```\nopen fence") == [.code(language: "", text: "open fence")], "markdown keeps an unclosed fence while streaming")
     check(Markdown.blocks("#hashtag") == [.paragraph("#hashtag")], "markdown needs a space after #")
+    check(Markdown.blocks("| x | y |\n|:--|--:|\n| 1 | 2 |") == [.table([["x", "y"], ["1", "2"]])], "markdown table rows")
+
+    // The cases from Jonni's "every markdown format" test.
+    check(Markdown.blocks("Setext one\n=====\nSetext two\n-----") == [.heading(level: 1, text: "Setext one"), .heading(level: 2, text: "Setext two")], "setext headings")
+    check(Markdown.blocks("text\n\n---") == [.paragraph("text"), .rule], "a rule after a blank line stays a rule")
+    check(Markdown.blocks("> outer\n> > inner") == [.quote([.paragraph("outer"), .quote([.paragraph("inner")])])], "nested quotes", "\(Markdown.blocks("> outer\n> > inner"))")
+    check(Markdown.blocks("> [!WARNING]\n> Careful.") == [.callout(kind: .warning, blocks: [.paragraph("Careful.")])], "GitHub alert", "\(Markdown.blocks("> [!WARNING]\n> Careful."))")
+    check(Markdown.blocks("Intro\n\n    indented code\n    more") == [.paragraph("Intro"), .code(language: "", text: "indented code\nmore")], "indented code block")
+    check(Markdown.blocks("Term\n: Meaning") == [.definition(term: "Term", definitions: ["Meaning"])], "definition list")
+    check(Markdown.blocks("$$\n\\frac{1}{2}\n$$") == [.math("\\frac{1}{2}")], "math block")
+    let details = Markdown.blocks("<details>\n<summary>More</summary>\n\nHidden **text**.\n</details>")
+    check(details == [.details(summary: "More", blocks: [.paragraph("Hidden **text**.")])], "details block", "\(details)")
+    let refs = Markdown.blocks("See [Docs][docs] and [docs].\n\n[docs]: https://resend.com/docs")
+    check(refs == [.paragraph("See [Docs](https://resend.com/docs) and [docs](https://resend.com/docs).")], "reference links resolve, the definition hides", "\(refs)")
+    let notes = Markdown.blocks("Claim[^1].\n\n[^1]: Source.")
+    check(notes == [.paragraph("Claim\(InlineMark.sup.wrap("1")).") , .footnotes([Footnote(id: "1", text: "Source.")])], "footnotes", "\(notes)")
+    check(Markdown.inline("![logo](https://x.y/a.png)") == "[🖼 logo](https://x.y/a.png)", "images become links")
+    check(Markdown.inline("<u>u</u> <mark>m</mark> H<sub>2</sub>O x<sup>2</sup> <kbd>⌘</kbd> <b>b</b> <i>i</i>")
+          == "\(InlineMark.underline.wrap("u")) \(InlineMark.highlight.wrap("m")) H\(InlineMark.sub.wrap("2"))O x\(InlineMark.sup.wrap("2")) \(InlineMark.key.wrap("⌘")) **b** *i*",
+          "inline HTML tags", Markdown.inline("<u>u</u> <b>b</b>"))
+    check(Markdown.inline("`<u>keep</u>` <u>x</u>") == "`<u>keep</u>` \(InlineMark.underline.wrap("x"))", "code spans are not rewritten")
+    check(Markdown.inline("Math: $e^{i\\pi} + 1 = 0$") == "Math: \(InlineMark.math.wrap("e\(InlineMark.sup.wrap("iπ")) + 1 = 0"))", "inline math", Markdown.inline("Math: $e^{i\\pi} + 1 = 0$"))
+    check(Markdown.inline("costs $5 and $10") == "costs $5 and $10", "dollar amounts are not math")
+    check(Markdown.inline("Ship it :rocket: :nope:") == "Ship it 🚀 :nope:", "emoji codes")
+    check(Markdown.prettyMath("\\sum_{n=1}^{\\infty} \\frac{1}{n^2}") == "∑\(InlineMark.sub.wrap("n=1"))\(InlineMark.sup.wrap("∞")) 1/n\(InlineMark.sup.wrap("2"))", "pretty math block", Markdown.prettyMath("\\sum_{n=1}^{\\infty} \\frac{1}{n^2}"))
+    check(Markdown.prettyMath("\\frac{a+b}{2}") == "(a+b)/2", "fractions keep parentheses only when needed")
+    check(Markdown.blocks("Text[^1].\n\n---\n\n[^1]: Note.").contains(.rule) == false, "no rule right before footnotes")
+    // Odd streamed input must not hang or crash.
+    for odd in ["<details>", "> [!NOTE]", "[^", "$$", "|", "- [", "1.", "   ", "```", "[a]: ", "<summary>x", "* * *", "\\"] {
+        _ = Markdown.blocks(odd)
+    }
+    check(true, "odd partial input parses")
 }
 
 // MARK: Spring
@@ -243,6 +293,7 @@ func conversationChecks() {
     check(conversation.isRunning, "a turn runs")
     check(wait { !conversation.isRunning }, "the echo turn ends")
     check(conversation.turns.last?.answer == "Echo: hello (turn 1)", "echo answer", conversation.turns.last?.answer ?? "nil")
+    check(conversation.lastModel == "claude-fake-9-9", "the conversation knows the answering model", conversation.lastModel ?? "nil")
     check(conversation.turns.last?.status == .done, "echo turn is done")
     check(!(conversation.turns.last?.answer.contains("SUBAGENT") ?? true), "subagent text stays out")
 

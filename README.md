@@ -34,7 +34,7 @@ One session runs all day, so follow-ups know the earlier questions. It resets at
 
 - **Shortcut.** Default ⌥⌘Space.
 - **Folder.** Where claude runs. Default `~/Workbench/work` if it exists, else your home folder.
-- **Model and effort.** Default: your Claude Code model, low effort (fastest).
+- **Model and effort.** Default: your Claude Code model, low effort (fastest). The model names always run the newest model of each family; Settings shows which one gave the last answer.
 - **Start fresh every day at 5 AM.** On by default.
 - **Keep Claude ready.** One claude process waits in the background, so the first answer starts about 2 seconds sooner.
 - **Open at login.**

@@ -9,6 +9,7 @@ public struct Preferences: Sendable {
         public static let keepWarm = "keepWarm"
         public static let dailyReset = "dailyReset"
         public static let didFirstRun = "didFirstRun"
+        public static let lastModel = "lastModel"
     }
 
     /// The folder claude runs in. Default: ~/Workbench/work when it exists, else the home folder.
@@ -18,9 +19,11 @@ public struct Preferences: Sendable {
         return FileManager.default.fileExists(atPath: work, isDirectory: &isDir) && isDir.boolValue ? work : home
     }
 
-    /// Models offered in Settings. Empty string is "your Claude Code default".
+    /// Models offered in Settings. The ids are Claude Code's aliases, which always point at the newest
+    /// model of each family, so a new release needs no update here. Empty is "your Claude Code default".
     public static let models: [(id: String, label: String)] = [
-        ("", "Claude Code default"), ("haiku", "Haiku (fastest)"), ("sonnet", "Sonnet"), ("opus", "Opus"),
+        ("", "Claude Code default"), ("haiku", "Haiku, newest (fastest)"), ("sonnet", "Sonnet, newest"),
+        ("opus", "Opus, newest"), ("fable", "Fable, newest"),
     ]
     public static let efforts: [(id: String, label: String)] = [
         ("low", "Low (fastest)"), ("medium", "Medium"), ("high", "High"), ("", "Claude Code default"),

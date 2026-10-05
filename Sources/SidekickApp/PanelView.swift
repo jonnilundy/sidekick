@@ -46,7 +46,7 @@ struct PanelCard: View {
         .clipShape(.rect(cornerRadius: PanelMetrics.cornerRadius, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: PanelMetrics.cornerRadius, style: .continuous)
-                .strokeBorder(.white.opacity(0.14), lineWidth: 0.5)
+                .strokeBorder(.primary.opacity(0.12), lineWidth: 0.5)
         }
         .shadow(color: .black.opacity(0.22), radius: 24, y: 10)
         .shadow(color: .black.opacity(0.10), radius: 2, y: 1)
@@ -111,7 +111,7 @@ struct PanelCard: View {
     }
 }
 
-/// One question and its answer.
+/// One question and its answer. The question sits in a tinted bubble on the right, like a sent message.
 struct TurnView: View {
     let turn: Conversation.Turn
     let isLast: Bool
@@ -119,37 +119,45 @@ struct TurnView: View {
     @State private var copied = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
             if let notice = turn.notice {
                 Label(notice, systemImage: "arrow.counterclockwise")
                     .font(.system(size: 11.5))
                     .foregroundStyle(.tertiary)
-                    .padding(.bottom, 2)
             }
-            Text(turn.question)
-                .font(.system(size: 12.5, weight: .medium))
-                .foregroundStyle(.secondary)
-                .lineLimit(isLast ? 4 : 2)
-                .textSelection(.enabled)
+            HStack(spacing: 0) {
+                Spacer(minLength: 48)
+                Text(turn.question)
+                    .font(.system(size: 13.5, weight: .medium))
+                    .foregroundStyle(.primary)
+                    .lineLimit(isLast ? 8 : 3)
+                    .textSelection(.enabled)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 7)
+                    .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Color.sidekick.opacity(0.16)))
+                    .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Color.sidekick.opacity(0.22), lineWidth: 0.5))
+            }
 
             if !turn.answer.isEmpty {
                 AnswerView(markdown: turn.answer)
+                    .overlay(alignment: .bottomTrailing) {
+                        if hovering && turn.status != .running {
+                            IconButton(symbol: copied ? "checkmark" : "doc.on.doc", help: "Copy answer (⇧⌘C)") {
+                                NSPasteboard.general.clearContents()
+                                NSPasteboard.general.setString(turn.answer, forType: .string)
+                                withAnimation(.snappy) { copied = true }
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { withAnimation(.snappy) { copied = false } }
+                            }
+                            .background(Circle().fill(Color.sidekickCard))
+                            .offset(x: 6, y: 6)
+                            .transition(.opacity)
+                        }
+                    }
             }
             status
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .overlay(alignment: .topTrailing) {
-            if hovering && !turn.answer.isEmpty && turn.status != .running {
-                IconButton(symbol: copied ? "checkmark" : "doc.on.doc", help: "Copy answer (⇧⌘C)") {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(turn.answer, forType: .string)
-                    withAnimation(.snappy) { copied = true }
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { withAnimation(.snappy) { copied = false } }
-                }
-                .offset(x: 6, y: -6)
-                .transition(.opacity)
-            }
-        }
+        .contentShape(Rectangle())
         .onHover { inside in withAnimation(.easeOut(duration: 0.12)) { hovering = inside } }
     }
 
@@ -256,35 +264,16 @@ struct PressScale: ButtonStyle {
     }
 }
 
-/// Liquid Glass on macOS 26 and later, the popover material before that. Solid when the user asks for
-/// less transparency.
+/// Solid black in dark mode, solid white in light mode. No translucency.
 struct CardBackground: View {
-    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
-
     var body: some View {
-        if reduceTransparency {
-            Rectangle().fill(Color(nsColor: .windowBackgroundColor))
-        } else if #available(macOS 26, *) {
-            Rectangle().fill(.clear)
-                .glassEffect(.regular, in: .rect(cornerRadius: PanelMetrics.cornerRadius, style: .continuous))
-        } else {
-            VisualEffect(material: .popover)
-        }
+        Rectangle().fill(Color.sidekickCard)
     }
 }
 
-struct VisualEffect: NSViewRepresentable {
-    let material: NSVisualEffectView.Material
-
-    func makeNSView(context: Context) -> NSVisualEffectView {
-        let view = NSVisualEffectView()
-        view.material = material
-        view.blendingMode = .behindWindow
-        view.state = .active
-        return view
-    }
-
-    func updateNSView(_ view: NSVisualEffectView, context: Context) {
-        view.material = material
-    }
+extension Color {
+    /// The card: pure black or pure white, following the system appearance.
+    static let sidekickCard = Color(nsColor: NSColor(name: "sidekickCard") { appearance in
+        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? .black : .white
+    })
 }

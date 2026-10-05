@@ -77,7 +77,7 @@ final class Probe: NSObject, NSApplicationDelegate {
         let url = outFolder.appendingPathComponent("\(name).png")
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
-        // A region, not the window alone, so the glass shows what is behind it.
+        // A region, not the window alone, so the shadow and the desktop around the card show.
         let f = panel.frame
         let screenTop = NSScreen.screens.first?.frame.maxY ?? f.maxY
         process.arguments = ["-x", "-R\(Int(f.minX)),\(Int(screenTop - f.maxY)),\(Int(f.width)),\(Int(f.height))", url.path]
@@ -204,6 +204,22 @@ final class Probe: NSObject, NSApplicationDelegate {
         _ = await until(5) { !conversation.isRunning }
         await pause(0.7)
         await shot("8-long-dark")
+
+        // Every markdown form, in both appearances.
+        for appearance in [NSAppearance.Name.aqua, .darkAqua] {
+            NSApp.appearance = NSAppearance(named: appearance)
+            let name = appearance == .aqua ? "light" : "dark"
+            _ = panel.performKeyEquivalent(with: key(45, "n", .command))
+            await type("kitchen one")
+            check(await until(5) { !conversation.isRunning }, "kitchen one ends (\(name))")
+            await pause(0.8)
+            await shot("9-markdown-one-\(name)")
+            _ = panel.performKeyEquivalent(with: key(45, "n", .command))
+            await type("kitchen two")
+            check(await until(5) { !conversation.isRunning }, "kitchen two ends (\(name))")
+            await pause(0.8)
+            await shot("9-markdown-two-\(name)")
+        }
 
         // Reduced motion: no slide, still opens and closes.
         model.reduceMotion = true

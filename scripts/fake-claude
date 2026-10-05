@@ -76,12 +76,86 @@ git -C repo worktree add ../repo-wt/task -b feat/task origin/main
 """
 
 
+KITCHEN_ONE = """# Heading 1
+## Heading 2
+### Heading 3
+#### Heading 4
+
+Setext heading
+==============
+
+**Bold**, *italic*, ***bold italic***, ~~strike~~, `inline code`, <u>underline</u>, <mark>highlight</mark>, H<sub>2</sub>O, E = mc<sup>2</sup>, <kbd>Cmd</kbd> + <kbd>K</kbd>.
+
+> Blockquote
+> > Nested blockquote
+
+> [!NOTE]
+> GitHub alert: note.
+
+> [!WARNING]
+> GitHub alert: warning.
+
+- Bullet
+  - Nested bullet
+    - Deeper bullet
+1. Ordered
+2. List
+   1. Nested ordered
+- [x] Done task
+- [ ] Open task
+"""
+
+KITCHEN_TWO = """| Left | Center | Right |
+|:--|:-:|--:|
+| a | b | c |
+| `code` | **bold** | *italic* |
+
+```python
+def hello():
+    # a comment
+    print("fenced code", 42)
+```
+
+```diff
+- removed line
++ added line
+```
+
+Inline link: [Resend](https://resend.com). Reference link: [Docs][docs]. Image: ![alt text](https://example.com/a.png)
+
+[docs]: https://resend.com/docs
+
+Footnote reference[^1].
+
+Term
+: Definition list
+
+<details>
+<summary>Collapsible section</summary>
+
+Hidden content.
+</details>
+
+Math: $e^{i\\pi} + 1 = 0$
+
+$$
+\\sum_{n=1}^{\\infty} \\frac{1}{n^2} = \\frac{\\pi^2}{6}
+$$
+
+Emoji: :rocket: :tada:
+
+---
+
+[^1]: The footnote text.
+"""
+
+
 def answer(question, turn):
     interrupted.clear()
     emit({"type": "system", "subtype": "init", "cwd": os.getcwd(), "tools": ["Read", "WebSearch"], "parent_tool_use_id": None})
     # A subagent line must be ignored by the app.
     emit({"type": "stream_event", "parent_tool_use_id": "toolu_sub", "event": {"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": "SUBAGENT TEXT"}}})
-    stream({"type": "message_start", "message": {"role": "assistant", "content": []}})
+    stream({"type": "message_start", "message": {"model": "claude-fake-9-9", "role": "assistant", "content": []}})
     q = question.lower()
     if "crash" in q:
         sys.stderr.write("fake-claude: crashed on purpose\n")
@@ -114,6 +188,12 @@ def answer(question, turn):
             result(None, is_error=True, subtype="error_during_execution")
         else:
             result("".join(words))
+        return
+    if "kitchen" in q:
+        body = KITCHEN_ONE if "one" in q else KITCHEN_TWO
+        chunks = [body[i:i + 40] for i in range(0, len(body), 40)]
+        text_block(0, chunks, gap=0.01)
+        result(body)
         return
     if "long" in q:
         chunks = [LONG[i:i + 12] for i in range(0, len(LONG), 12)]

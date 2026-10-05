@@ -8,6 +8,8 @@ public enum StreamEvent: Equatable, Sendable {
     case text(String)
     /// A tool started. The name is the raw tool name (WebSearch, Read, mcp__x__y).
     case tool(name: String, detail: String?)
+    /// The model that answers this turn, from `message_start` (for example claude-sonnet-5-5).
+    case model(String)
     /// The turn ended. `text` is the final answer text from the result line.
     case done(isError: Bool, text: String?)
 }
@@ -64,6 +66,9 @@ public struct StreamParser: Sendable {
     private mutating func parse(streamEvent event: [String: Any]) -> [StreamEvent] {
         let index = event["index"] as? Int ?? -1
         switch event["type"] as? String {
+        case "message_start":
+            guard let model = (event["message"] as? [String: Any])?["model"] as? String, !model.isEmpty else { return [] }
+            return [.model(model)]
         case "content_block_start":
             guard let block = event["content_block"] as? [String: Any] else { return [] }
             switch block["type"] as? String {
@@ -136,5 +141,16 @@ public enum ToolLabel {
         guard let detail, !detail.isEmpty else { return verb }
         if name == "Bash" || name == "ToolSearch" { return verb }
         return "\(verb): \(detail)"
+    }
+}
+
+/// Friendly names for model ids: claude-sonnet-5-5 is "Sonnet 5.5", claude-haiku-4-5-20251001 is "Haiku 4.5".
+public enum ModelName {
+    public static func display(_ id: String) -> String {
+        let parts = id.split(separator: "-").map(String.init)
+        guard parts.count >= 3, parts[0] == "claude" else { return id }
+        let family = parts[1].prefix(1).uppercased() + parts[1].dropFirst()
+        let version = parts.dropFirst(2).prefix { $0.count <= 2 && Int($0) != nil }
+        return version.isEmpty ? family : "\(family) \(version.joined(separator: "."))"
     }
 }

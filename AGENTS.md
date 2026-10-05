@@ -7,13 +7,13 @@ A native macOS quick-answer panel (SwiftPM, macOS 15+, Swift 6.4) that runs the 
 - `Sources/SidekickCore`: everything that runs without a window. The claude process (`ClaudeProcess`), the stream-json parser, the session (`Conversation`), markdown blocks, springs, the daily reset, settings.
 - `Sources/SidekickApp`: the panel (`PanelController`, `PanelView`, `AnswerView`), the menu bar item and hotkey (`AppDelegate`), Settings, and the window probe (`Probe`).
 - `Sources/sidekick-checks`: plain checks for the core, against `scripts/fake-claude`.
-- `scripts/fake-claude`: a stand-in for `claude -p` with the same stream-json shapes. Behavior depends on the question (`slow`, `tool`, `fail`, `crash`, `long`).
+- `scripts/fake-claude`: a stand-in for `claude -p` with the same stream-json shapes. Behavior depends on the question (`slow`, `stubborn`, `tool`, `fail`, `crash`, `long`, `kitchen one`, `kitchen two`). The kitchen answers hold every markdown form the panel renders.
 
 ## Scripts
 
 | Script | What it does | Safe on Jonni's Mac |
 | --- | --- | --- |
-| `scripts/test.sh` | Checks (103, about 10 s) and a compile of the app | Yes |
+| `scripts/test.sh` | Checks (128, about 10 s) and a compile of the app | Yes |
 | `scripts/test.sh --vm` | Then builds the app and runs the window probe in the VM | Yes (the window part runs in the VM) |
 | `$(swift build --show-bin-path)/sidekick-checks --live` | One real question through the real claude. Costs a few cents | Yes, no windows |
 | `scripts/build-app.sh` | Release build into `build/Sidekick.app`, ad hoc signed | Yes |

@@ -55,6 +55,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         conversation.keepWarm = defaults.bool(forKey: Preferences.Key.keepWarm)
         conversation.onTurnEnded = { [weak self] in self?.panel.turnEnded() }
+        conversation.onModel = { [defaults] id in defaults.set(id, forKey: Preferences.Key.lastModel) }
         panel.onOpenSettings = { [weak self] in self?.openSettings() }
         panel.dailyResetEnabled = { [defaults] in defaults.bool(forKey: Preferences.Key.dailyReset) }
         model.dailyResetEnabled = panel.dailyResetEnabled

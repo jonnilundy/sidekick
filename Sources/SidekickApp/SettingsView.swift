@@ -12,6 +12,7 @@ struct SettingsView: View {
     @AppStorage(Preferences.Key.effort) private var effort = "low"
     @AppStorage(Preferences.Key.keepWarm) private var keepWarm = true
     @AppStorage(Preferences.Key.dailyReset) private var dailyReset = true
+    @AppStorage(Preferences.Key.lastModel) private var lastModel = ""
     @State private var launchAtLogin = LaunchAtLogin.isEnabled
     @State private var loginNote: String?
 
@@ -22,6 +23,7 @@ struct SettingsView: View {
         _effort = AppStorage(wrappedValue: "low", Preferences.Key.effort, store: defaults)
         _keepWarm = AppStorage(wrappedValue: true, Preferences.Key.keepWarm, store: defaults)
         _dailyReset = AppStorage(wrappedValue: true, Preferences.Key.dailyReset, store: defaults)
+        _lastModel = AppStorage(wrappedValue: "", Preferences.Key.lastModel, store: defaults)
     }
 
     var body: some View {
@@ -38,8 +40,13 @@ struct SettingsView: View {
                 }
             }
 
-            Picker("Model", selection: $model) {
+            Picker(selection: $model) {
                 ForEach(Preferences.models, id: \.id) { Text($0.label).tag($0.id) }
+            } label: {
+                Text("Model")
+                if !lastModel.isEmpty {
+                    Text("Last answer came from \(ModelName.display(lastModel)).")
+                }
             }
             Picker("Effort", selection: $effort) {
                 ForEach(Preferences.efforts, id: \.id) { Text($0.label).tag($0.id) }
