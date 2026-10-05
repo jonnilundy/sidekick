@@ -207,21 +207,87 @@ do {
     check(Markdown.prettyMath("\\frac{a+b}{2}") == "(a+b)/2", "fractions keep parentheses only when needed")
     check(Markdown.blocks("Text[^1].\n\n---\n\n[^1]: Note.").contains(.rule) == false, "no rule right before footnotes")
     // Streaming parse: every prefix of a real answer parses the same as the whole text would, settled.
-    let sample = "Answer first.\n\nWorth knowing:\n- one\n- two\n  wrapped\n\n```swift\nlet a = 1\n\nlet b = 2\n```\n\n| a | b |\n| - | - |\n| 1 | 2 |\n\n> quote\n\nDone."
-    let streamer = StreamingMarkdown()
-    var prefixesMatch = true
-    var cut = sample.startIndex
-    while cut < sample.endIndex {
-        cut = sample.index(after: cut)
-        let prefix = String(sample[..<cut])
-        // Block boundaries can differ mid-line; compare at line ends, which is what settles.
-        if prefix.hasSuffix("\n") && streamer.blocks(prefix) != Markdown.blocks(prefix) { prefixesMatch = false; print("FAIL streaming prefix: \(prefix.debugDescription)") }
+    // Each sample streams one character at a time; the settled part must only grow.
+    func streamsLikeFullParse(_ sample: String) -> (matches: Bool, settled: [Int]) {
+        let streamer = StreamingMarkdown()
+        var matches = true
+        var settled: [Int] = []
+        var cut = sample.startIndex
+        while cut < sample.endIndex {
+            cut = sample.index(after: cut)
+            let prefix = String(sample[..<cut])
+            let streamed = streamer.blocks(prefix)
+            settled.append(streamer.settledLength)
+            // Block boundaries can differ mid-line; compare at line ends, which is what settles.
+            if prefix.hasSuffix("\n") && streamed != Markdown.blocks(prefix) { matches = false; print("FAIL streaming prefix: \(prefix.debugDescription)") }
+        }
+        if streamer.blocks(sample) != Markdown.blocks(sample) { matches = false; print("FAIL streaming whole: \(sample.debugDescription)") }
+        return (matches && settled == settled.sorted(), settled)
     }
-    check(prefixesMatch, "streaming parse matches a full parse at every line end")
-    check(streamer.blocks(sample) == Markdown.blocks(sample), "streaming parse of the whole answer matches")
+    let sample = "Answer first.\n\nWorth knowing:\n- one\n- two\n  wrapped\n\n```swift\nlet a = 1\n\nlet b = 2\n```\n\n| a | b |\n| - | - |\n| 1 | 2 |\n\n> quote\n\nDone."
+    check(streamsLikeFullParse(sample).matches, "streaming parse matches a full parse at every line end")
+    let longList = "Intro.\n\n" + (0..<150).map { "- item \($0) of the long list" }.joined(separator: "\n") + "\n"
+    let long = streamsLikeFullParse(longList)
+    check(long.matches, "streaming a 150 item list matches a full parse at every line end")
+    check((long.settled.last ?? 0) > longList.utf8.count - 60, "a long list settles item by item", "settled \(long.settled.last ?? 0) of \(longList.utf8.count)")
+    let lists = [
+        "- a\n  - b\n    - c\n- d\n  wrapped\n- e\n    - f\n- g\n1. one\n2. two\n   - under\n3. three\n",
+        "- a\n- b\nA paragraph right after.\n\n- c\n- d\n\nAnother paragraph.\n",
+        "- loose a\n\n- loose b\n\n  more of b\n\n- loose c\n\n\n- after two blanks\n",
+        "  - starts indented\n- flush\n  - deeper\n- flush again\n   - three spaces\n",
+        "- a\n- b\n```\ncode\n```\n- c\n- d\n# Heading\n- e\n- f\n> quote\n- g\n",
+        "- a\n- b\n\n    indented\n- c\n\n---\n\n* star\n* star two\n+ plus\n",
+        "- a\n- b\n$$\n- in math\n- more math\n$$\n- c\n- d\n",
+        "- a\n<details>\n- inside\n- inside two\n</details>\n- c\n- d\n",
+    ]
+    for (n, text) in lists.enumerated() {
+        check(streamsLikeFullParse(text).matches, "streaming nested and mixed lists \(n + 1) match a full parse")
+    }
+
+    // Row 4: numbered lists can start past 999, up to 9 digits.
+    check(Markdown.blocks("1284. a\n1285. b") == [.list([ListItem(level: 0, marker: .number(1284), text: "a"), ListItem(level: 0, marker: .number(1285), text: "b")])],
+          "a numbered list can start at 1284", "\(Markdown.blocks("1284. a\n1285. b"))")
+    check(Markdown.blocks("1234567890. not a list") == [.paragraph("1234567890. not a list")], "a 10 digit number is not a list")
+
+    // Row 6: unclosed markers hide while streaming, and only then.
+    func streamed(_ text: String) -> [MarkdownBlock] { StreamingMarkdown().blocks(text, streaming: true) }
+    check(streamed("Tokyo is **16 hou") == [.paragraph("Tokyo is 16 hou")], "an unclosed ** hides while streaming", "\(streamed("Tokyo is **16 hou"))")
+    check(streamed("Tokyo is **16 hours*") == [.paragraph("Tokyo is 16 hours")], "half of a closing ** hides too", "\(streamed("Tokyo is **16 hours*"))")
+    check(streamed("Tokyo is **16 hours**") == [.paragraph("Tokyo is **16 hours**")], "a closed ** stays while streaming")
+    check(StreamingMarkdown().blocks("Tokyo is **16 hours**") == Markdown.blocks("Tokyo is **16 hours**") && Markdown.blocks("Tokyo is **16 hou") == [.paragraph("Tokyo is **16 hou")],
+          "a finished answer parses unchanged")
+    check(streamed("Run `swift bu") == [.paragraph("Run swift bu")], "an unclosed backtick hides while streaming")
+    check(streamed("Run `swift build` now") == [.paragraph("Run `swift build` now")], "a closed code span stays")
+    check(streamed("Was ~~wrong") == [.paragraph("Was wrong")], "an unclosed ~~ hides while streaming")
+    check(streamed("**Done** and ~~old~~ and **new") == [.paragraph("**Done** and ~~old~~ and new")], "only the last unmatched marker goes")
+    check(streamed("Use `a ** b` and **bo") == [.paragraph("Use `a ** b` and bo")], "a ** inside a code span is left alone", "\(streamed("Use `a ** b` and **bo"))")
+    check(streamed("Text\n\n```\nlet x = a ** b\n") == [.paragraph("Text"), .code(language: "", text: "let x = a ** b\n")], "a ** inside a fence is left alone", "\(streamed("Text\n\n```\nlet x = a ** b\n"))")
+    check(streamed("- one **a**\n- two **b") == [.list([ListItem(level: 0, marker: .bullet, text: "one **a**"), ListItem(level: 0, marker: .bullet, text: "two b")])],
+          "the last list item hides its unclosed **")
+    check(streamed("Say \\*\\* twice") == [.paragraph("Say \\*\\* twice")], "escaped stars stay")
+
+    // Timing without windows: the shape of fake-claude's WORST_BIG (100 paragraphs of 30 words, then a
+    // 150 item list), parsed at every 12 character prefix the way it streams. Prints the slowest call per part.
+    let paragraphs = (0..<100).map { i in "Paragraph \(i): " + (0..<30).map { "word\(i)-\($0)" }.joined(separator: " ") }
+    let worstBig = paragraphs.joined(separator: "\n\n") + "\n\n" + (0..<150).map { "- item \($0) of the long list" }.joined(separator: "\n")
+    let listStart = worstBig.utf8.count - (worstBig.components(separatedBy: "\n\n").last ?? "").utf8.count
+    let timed = StreamingMarkdown()
+    var slowestParagraph = Duration.zero, slowestList = Duration.zero
+    var offset = 12
+    while true {
+        let prefix = String(decoding: worstBig.utf8.prefix(offset), as: UTF8.self)
+        let clock = ContinuousClock()
+        let took = clock.measure { _ = timed.blocks(prefix, streaming: true) }
+        if offset <= listStart { slowestParagraph = max(slowestParagraph, took) } else { slowestList = max(slowestList, took) }
+        if offset >= worstBig.utf8.count { break }
+        offset = min(offset + 12, worstBig.utf8.count)
+    }
+    func ms(_ d: Duration) -> String { String(format: "%.2f ms", Double(d.components.attoseconds) / 1e15 + Double(d.components.seconds) * 1000) }
+    print("markdown timing: worst-big slowest call \(ms(slowestParagraph)) in the paragraphs, \(ms(slowestList)) in the list")
+    check(timed.blocks(worstBig) == Markdown.blocks(worstBig), "streaming parse of worst-big matches a full parse")
 
     // Odd streamed input must not hang or crash.
-    for odd in ["<details>", "> [!NOTE]", "[^", "$$", "|", "- [", "1.", "   ", "```", "[a]: ", "<summary>x", "* * *", "\\"] {
+    for odd in ["<details>", "<details", "text\n<DETAILS open", "> [!NOTE]", "[^", "$$", "|", "- [", "1.", "   ", "```", "[a]: ", "<summary>x", "* * *", "\\"] {
         _ = Markdown.blocks(odd)
     }
     check(true, "odd partial input parses")

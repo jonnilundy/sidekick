@@ -200,7 +200,8 @@ public enum Markdown {
                         summary = String(match.1).trimmingCharacters(in: .whitespaces)
                         current.replaceSubrange(match.range, with: "")
                     }
-                    current = current.replacing(/(?i)<\/?details[^>]*>/, with: "")
+                    // A tag cut off mid-stream ("<details") goes too, or the nested parse would see it again forever.
+                    current = current.replacing(/(?i)<\/?details[^>]*(?:>|$)/, with: "")
                     if !current.trimmingCharacters(in: .whitespaces).isEmpty { body.append(current) }
                     if depth <= 0 { break }
                     index += 1
@@ -323,7 +324,8 @@ public enum Markdown {
     }
 
     static func listItem(_ line: String) -> (indent: Int, marker: ListItem.Marker, text: String)? {
-        guard let match = line.firstMatch(of: /^( *)([-*+•]|\d{1,3}[.)])\s+(.*)$/) else { return nil }
+        // Up to 9 digits, as in CommonMark, so a list can start at 1284.
+        guard let match = line.firstMatch(of: /^( *)([-*+•]|\d{1,9}[.)])\s+(.*)$/) else { return nil }
         // "---" is a rule, "* * *" too, not an empty item.
         if isRule(line.trimmingCharacters(in: .whitespaces)) { return nil }
         let indent = match.1.count
@@ -473,54 +475,202 @@ public enum Markdown {
     ]
 }
 
-/// Parses a growing answer without starting over each time. The part up to the last blank line outside a
-/// code fence is settled: it is parsed once and kept. Only the tail after it is parsed again. Answers with
-/// footnotes or reference links (which reach across the whole text) are always parsed whole.
+/// Parses a growing answer without starting over each time. The part before the last seam is settled: it is
+/// parsed once and kept. Only the tail after it is parsed again. A seam is a line that starts flush left after
+/// a blank line, outside a code fence, or a top level item of a list (so a long list is not parsed again on
+/// every update). Answers with footnotes or reference links (which reach across the whole text) are always
+/// parsed whole.
 public final class StreamingMarkdown {
     private var settledSource = ""
     private var settledBlocks: [MarkdownBlock] = []
+    /// True when the settled part ends inside a list that goes on after it.
+    private var settledInList = false
+    private var scan = Scan()
 
     public init() {}
 
-    public func blocks(_ source: String) -> [MarkdownBlock] {
-        if source.contains("[^") || source.contains("]: ") { return Markdown.blocks(source) }
-        let split = Self.settledEnd(source)
-        let settled = String(source[..<split])
-        if settled != settledSource {
-            // Append only: parse just the newly settled part. It starts after a blank line, so it parses
-            // the same on its own as inside the whole text.
-            if !settledSource.isEmpty, settled.hasPrefix(settledSource) {
-                settledBlocks += Markdown.blocks(String(settled.dropFirst(settledSource.count)))
-            } else {
-                settledBlocks = Markdown.blocks(settled)
-            }
-            settledSource = settled
-        }
-        let tail = String(source[split...])
-        return settledBlocks + Markdown.blocks(tail)
+    /// How much of the source is settled, in UTF-8 bytes. The checks watch it grow.
+    public var settledLength: Int { settledSource.utf8.count }
+
+    /// Pass `streaming` while the answer is still arriving: the last block then hides a `**`, `~~` or
+    /// backtick that has not closed yet. A finished answer parses exactly like `Markdown.blocks`.
+    public func blocks(_ source: String, streaming: Bool = false) -> [MarkdownBlock] {
+        var blocks = parse(source)
+        if streaming, let last = blocks.popLast() { blocks.append(Self.hidingOpenMarkers(in: last)) }
+        return blocks
     }
 
-    /// The index after the last blank line that is not inside a fenced code block, or the start.
-    static func settledEnd(_ source: String) -> String.Index {
+    private func parse(_ source: String) -> [MarkdownBlock] {
+        if source.contains("[^") || source.contains("]: ") { return Markdown.blocks(source) }
+        if !source.hasPrefix(scan.read) {
+            // Not the same answer growing: start over.
+            scan = Scan()
+            settledSource = ""
+            settledBlocks = []
+            settledInList = false
+        }
+        scan.advance(source)
+        let bytes = source.utf8
+        let split = bytes.index(bytes.startIndex, offsetBy: scan.end)
+        if scan.end != settledSource.utf8.count {
+            // Append only: parse just the newly settled part. It starts at a seam, so it parses the same on
+            // its own as inside the whole text, apart from a list that the seam cut in two.
+            let from = bytes.index(bytes.startIndex, offsetBy: settledSource.utf8.count)
+            settledBlocks = Self.joined(settledBlocks, Markdown.blocks(String(source[from..<split])), listOpen: settledInList)
+            settledSource = String(source[..<split])
+            settledInList = scan.endsInList
+        }
+        return Self.joined(settledBlocks, Markdown.blocks(String(source[split...])), listOpen: settledInList)
+    }
+
+    /// Puts two halves of a list cut at a seam back together.
+    static func joined(_ head: [MarkdownBlock], _ rest: [MarkdownBlock], listOpen: Bool) -> [MarkdownBlock] {
+        guard listOpen, case .list(let first)? = head.last, case .list(let second)? = rest.first else { return head + rest }
+        return head.dropLast() + [.list(first + second)] + rest.dropFirst()
+    }
+
+    /// Finds seams line by line and remembers where it stopped, so each call reads only the new lines.
+    /// It follows the block parser's list rules closely enough to know when a list goes on.
+    struct Scan {
+        /// The source up to `offset`, to check that the next source still starts with it.
+        var read = ""
+        /// UTF-8 offset of the first line not read yet.
+        var offset = 0
+        /// UTF-8 offset of the last seam.
+        var end = 0
+        var endsInList = false
         var inFence = false
-        var lastBreak = source.startIndex
-        var lineStart = source.startIndex
         var previousBlank = false
-        var index = source.startIndex
-        while index < source.endIndex {
-            let lineEnd = source[index...].firstIndex(of: "\n") ?? source.endIndex
-            let line = source[lineStart..<lineEnd].trimmingCharacters(in: .whitespaces)
-            if line.hasPrefix("```") || line.hasPrefix("~~~") { inFence.toggle() }
-            let blank = line.isEmpty
-            // A blank line followed by a line that starts flush left (not a list continuation) ends a block.
-            if previousBlank, !inFence, !blank, lineStart < source.endIndex, source[lineStart] != " " {
-                lastBreak = lineStart
+        var inList = false
+        var listIndent = 0
+        /// Off for good once the text holds a math block, details, tabs or CR: list seams are not safe there.
+        var listSeams = true
+
+        mutating func advance(_ text: String) {
+            let bytes = text.utf8
+            var start = bytes.index(bytes.startIndex, offsetBy: offset)
+            while start < bytes.endIndex {
+                guard let newline = bytes[start...].firstIndex(of: UInt8(ascii: "\n")) else {
+                    // An unfinished last line. Only a plain block break is safe to decide from it.
+                    let line = text[start...].trimmingCharacters(in: .whitespaces)
+                    if previousBlank, !inFence, !inList, !line.isEmpty, !line.hasPrefix("```"), !line.hasPrefix("~~~"),
+                       bytes[start] != UInt8(ascii: " ") {
+                        seam(at: offset, list: false)
+                    }
+                    break
+                }
+                line(text[start..<newline])
+                start = bytes.index(after: newline)
+                offset = bytes.distance(from: bytes.startIndex, to: start)
+            }
+            read = String(text[..<start])
+        }
+
+        private mutating func seam(at position: Int, list: Bool) {
+            end = position
+            endsInList = list
+        }
+
+        private mutating func line(_ raw: Substring) {
+            let lineStart = offset
+            if raw.contains("\r") || raw.contains("$$") || (raw.contains("<") && raw.lowercased().contains("<details")) {
+                listSeams = false
+            }
+            let expanded = raw.contains("\t") ? raw.replacingOccurrences(of: "\t", with: "    ") : String(raw)
+            let trimmed = expanded.trimmingCharacters(in: .whitespaces)
+            let fence = trimmed.hasPrefix("```") || trimmed.hasPrefix("~~~")
+            if fence { inFence.toggle() }
+            let blank = trimmed.isEmpty
+            let indent = expanded.prefix(while: { $0 == " " }).count
+            let item = !inFence && !fence && !blank && Markdown.listItem(expanded) != nil
+            // The parser ends a list at a blank line unless the next line is an item or indented.
+            if inList, previousBlank, !item, indent < 2 { inList = false }
+
+            let listSeam = inList && item && indent == 0 && listIndent == 0 && listSeams && !inFence
+            if previousBlank, !inFence, !blank, indent == 0 {
+                // A line flush left after a blank line: a new block, or the next item of a list that goes on.
+                if !inList { seam(at: lineStart, list: false) } else if listSeam { seam(at: lineStart, list: true) }
+            } else if listSeam {
+                seam(at: lineStart, list: true)
+            }
+
+            if fence {
+                inList = false
+            } else if inFence || blank {
+                // Code, or a blank line: the list state waits for the next line.
+            } else if item {
+                if !inList { inList = true; listIndent = indent }
+            } else if inList, indent >= 2, !Self.opensBlock(trimmed) {
+                // A wrapped line of the item above.
+            } else {
+                inList = false
             }
             previousBlank = blank && !inFence
-            guard lineEnd < source.endIndex else { break }
-            index = source.index(after: lineEnd)
-            lineStart = index
         }
-        return lastBreak
+
+        /// Lines the parser reads as their own block even when indented inside a list.
+        static func opensBlock(_ trimmed: String) -> Bool {
+            trimmed.hasPrefix("$$") || trimmed.lowercased().hasPrefix("<details") || trimmed.hasPrefix("|")
+                || trimmed.hasPrefix(">") || Markdown.headingLevel(trimmed) != nil || Markdown.isRule(trimmed)
+        }
+    }
+
+    // MARK: Unclosed markers
+
+    /// While an answer streams, its last block can hold a `**`, `~~` or backtick whose partner has not
+    /// arrived yet. This drops the unmatched marker and keeps the words. Code blocks are left alone.
+    static func hidingOpenMarkers(in block: MarkdownBlock) -> MarkdownBlock {
+        switch block {
+        case .paragraph(let text): return .paragraph(hidingOpenMarkers(text))
+        case .heading(let level, let text): return .heading(level: level, text: hidingOpenMarkers(text))
+        case .list(var items):
+            if !items.isEmpty { items[items.count - 1].text = hidingOpenMarkers(items[items.count - 1].text) }
+            return .list(items)
+        case .quote(let blocks):
+            guard let last = blocks.last else { return block }
+            return .quote(blocks.dropLast() + [hidingOpenMarkers(in: last)])
+        case .callout(let kind, let blocks):
+            guard let last = blocks.last else { return block }
+            return .callout(kind: kind, blocks: blocks.dropLast() + [hidingOpenMarkers(in: last)])
+        default: return block
+        }
+    }
+
+    /// The text rule behind `hidingOpenMarkers(in:)`. Closed code spans are skipped the way `Markdown.inline`
+    /// finds them; an unclosed backtick run goes. An odd `**` or `~~` loses its last one, and a lone `*` or `~`
+    /// at the very end (half of a marker) goes too.
+    public static func hidingOpenMarkers(_ text: String) -> String {
+        guard text.contains(where: { $0 == "*" || $0 == "~" || $0 == "`" }) else { return text }
+        let chars = Array(text)
+        var drop = IndexSet()
+        var bold: [Int] = [], strike: [Int] = []
+        var i = 0
+        while i < chars.count {
+            let c = chars[i]
+            if c == "\\" { i += 2; continue }
+            guard c == "`" || c == "*" || c == "~" else { i += 1; continue }
+            var run = 1
+            while i + run < chars.count, chars[i + run] == c { run += 1 }
+            if c == "`" {
+                // Find the same run of backticks further on; without one the span is not closed.
+                var j = i + run
+                var closed = false
+                while j + run <= chars.count {
+                    if chars[j..<(j + run)].allSatisfy({ $0 == "`" }) { closed = true; break }
+                    j += 1
+                }
+                if closed { i = j + run; continue }
+                drop.insert(integersIn: i..<(i + run))
+            } else {
+                let pairs = stride(from: i, to: i + run - 1, by: 2)
+                if c == "*" { bold += pairs } else { strike += pairs }
+                if run % 2 == 1, i + run == chars.count { drop.insert(i + run - 1) }
+            }
+            i += run
+        }
+        if bold.count % 2 == 1, let last = bold.last { drop.insert(integersIn: last..<(last + 2)) }
+        if strike.count % 2 == 1, let last = strike.last { drop.insert(integersIn: last..<(last + 2)) }
+        guard !drop.isEmpty else { return text }
+        return String(chars.indices.filter { !drop.contains($0) }.map { chars[$0] })
     }
 }
