@@ -205,19 +205,6 @@ Worth knowing:
 - 9 AM in SF is 1 AM the next day in Tokyo.
 - Japan does not observe daylight saving.
 """),
-    (("best time", "call"), None,
-     """Late afternoon in SF: **4 to 6 PM** there is **8 to 10 AM** the next day in Tokyo.
-
-| San Francisco | Tokyo, next day |
-| --- | --- |
-| 4 PM | 8 AM |
-| 5 PM | 9 AM |
-| 6 PM | 10 AM |
-
-Worth knowing:
-- After Nov 1 the same Tokyo hours start at **3 PM** in SF.
-- Fridays in SF land on Saturday morning in Tokyo.
-"""),
 ]
 
 

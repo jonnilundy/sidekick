@@ -5,17 +5,17 @@
 # out/demo.mov, and saves full screen stills of the finished answers (out/*.png). out/demo.log has
 # the timeline and the card frame of each still. Cropping and encoding happen on the Mac.
 #
-# The media, on the Mac, from build/vm-out/ (screen 2560x1440 pt; demo.mov is 4096x2304, the stills
-# 5120x2880). Check the trim against the take first: the card arrives about 0.8 s after the log's
-# "show" time, and the last slide out ends about 0.8 s after "esc 2".
-#   CUT="fps=30,trim=start=3.5:end=28.35,setpts=PTS-STARTPTS,crop=896:1008:3200:0"
-#   ffmpeg -i build/vm-out/demo.mov -an -vf "$CUT" -c:v libx264 -preset slow -crf 22 \
-#     -pix_fmt yuv420p -movflags +faststart assets/demo.mp4
-#   ffmpeg -i build/vm-out/demo.mov -vf "$CUT,fps=20,scale=640:-1:flags=lanczos,split[a][b];\
+# The media, on the Mac, from build/vm-out/ (screen 2560x1440 pt; demo.mov is 4096x2304 at 1.6 px
+# per pt, the stills 5120x2880 at 2x). Both crops are the same 16:9 box of 800x450 pt at the top
+# right: the menu bar, the card (440 pt plus the 12 pt edge gap) and the wallpaper on the left.
+# Check the trim against the take first: the card arrives about 1.1 s after the log's "show" time,
+# and the last slide out ends about 1.2 s after "esc 2". Keep about 0.4 s of desktop at each end.
+# The card must fit in 450 pt: the log's still line has its height (271 pt at y 38 for one answer).
+#   CUT="fps=30,trim=start=3.6:end=20.5,setpts=PTS-STARTPTS,crop=1280:720:2816:0"
+#   ffmpeg -i build/vm-out/demo.mov -vf "$CUT,fps=20,scale=960:540:flags=lanczos,split[a][b];\
 #     [a]palettegen=max_colors=128:stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=4:diff_mode=rectangle" \
 #     -loop 0 assets/demo.gif
-#   ffmpeg -i build/vm-out/dark-2.png -vf crop=1000:1254:4120:0 assets/screenshot-dark.png
-# The still crop is the card plus 48 pt of desktop and the menu bar; the card height is in the log.
+#   ffmpeg -i build/vm-out/dark-1.png -vf crop=1600:900:3520:0 assets/screenshot-dark.png
 cd "$(dirname "$0")/.."
 rm -rf out && mkdir -p out
 APP=build/Sidekick.app/Contents/MacOS/Sidekick

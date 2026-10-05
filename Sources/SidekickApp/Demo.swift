@@ -195,7 +195,7 @@ final class Demo: NSObject, NSApplicationDelegate {
         CGWarpMouseCursorPosition(quietSpot)
         await pause(2.0)
 
-        // The take: open, ask, follow up, put away, reopen after a quiet spell, pull the history.
+        // The take: open, ask, put away, reopen after a quiet spell, pull the question back.
         mark("show")
         app.panel.show()
         await pause(0.8)
@@ -203,13 +203,8 @@ final class Demo: NSObject, NSApplicationDelegate {
         await type("What's the time difference between San Francisco and Tokyo?")
         await answer("question 1")
         // A still takes about a second with the screen at rest, so it counts as reading time.
-        await pause(1.0)
+        await pause(1.2)
         await still("dark-1")
-        mark("typing 2")
-        await type("Best time for a call with both?")
-        await answer("question 2")
-        await pause(1.3)
-        await still("dark-2")
         model.idleCollapseAfter = 0.3
         mark("esc")
         escape()
@@ -218,12 +213,11 @@ final class Demo: NSObject, NSApplicationDelegate {
         app.panel.show()
         await pause(0.8)
         mark("pull")
-        await dragGrabber(by: 150)
+        await dragGrabber(by: 120)
         mark("pulled open=\(model.historyOpen)")
         await pause(0.3)
         await movePointer(to: quietSpot, duration: 0.4)
-        await pause(0.4)
-        await still("dark-history")
+        await pause(1.2)
         mark("esc 2")
         escape()
         await pause(1.5)
