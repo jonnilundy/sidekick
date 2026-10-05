@@ -22,7 +22,7 @@ enum PanelMotion {
     static let pullFlick = Animation.spring(response: 0.42, dampingFraction: 0.8)
     static let pullSettle = Animation.spring(response: 0.38, dampingFraction: 1)
     /// Button press feedback.
-    static let press = Animation.spring(response: 0.18, dampingFraction: 1)
+    static let press = Animation.spring(response: 0.16, dampingFraction: 1)
     /// A details section opening or closing.
     static let disclose = Animation.spring(response: 0.3, dampingFraction: 1)
     /// Reduced motion: fades instead of slides.
@@ -343,7 +343,7 @@ struct IconButton: View {
 struct PressScale: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .scaleEffect(configuration.isPressed ? 0.9 : 1)
+            .scaleEffect(configuration.isPressed ? 0.97 : 1)
             .animation(PanelMotion.press, value: configuration.isPressed)
     }
 }
