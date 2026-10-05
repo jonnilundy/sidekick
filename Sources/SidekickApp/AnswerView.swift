@@ -5,14 +5,14 @@ import SidekickCore
 /// plus the `InlineMark`s the parser leaves for underline, highlight, sub, sup, keys and math.
 struct AnswerView: View {
     let markdown: String
-    /// Kept for callers; parsing is incremental either way.
+    /// True while the answer streams: an unclosed `**`, `~~` or backtick at the end is hidden until it closes.
     var streaming = false
     @State private var parser = StreamingMarkdown()
 
     var body: some View {
         // The streaming parser matches a full parse (a check proves it) and keeps its work, so a finished
         // answer does not pay for one more full parse at the end.
-        BlocksView(blocks: parser.blocks(markdown))
+        BlocksView(blocks: parser.blocks(markdown, streaming: streaming))
             .textSelection(.enabled)
             .frame(maxWidth: .infinity, alignment: .leading)
             // Answers are model output. Only web and mail links open; file:, app schemes and the rest do not.
