@@ -150,6 +150,48 @@ Emoji: :rocket: :tada:
 """
 
 
+# break-ui worst cases: plausible values a real answer or question can carry, all at once.
+WORST_TEXT = """## Notes for Aleksandra Wiśniewska-Kowalczyk on the Northwind Industries Holdings renewal, third revision
+
+Send it to bartholomew.fitzgerald@northwind-industries-holdings.example.com and cc Jo.
+
+The signed copy: https://northwind-industries-holdings.example.com/contracts/2026/renewals/enterprise/NW-2026-0001284-final-v12-signed-countersigned.pdf?download=1&utm_source=sidekick
+
+Commit `4f9c2a7e1b3d5c8f0a6e2d4b7c9f1a3e5d7b9c0f2a4e6d8b1c3f5a7e9d0b2c4f6` holds the fix.
+
+Tiếng Việt: Nguyễn Thị Phương Thảo đã xác nhận. ภาษาไทย: ยืนยันแล้ว. العربية: تم التأكيد من الفريق.
+Family: 👨‍👩‍👧‍👦 🏳️‍🌈 🧑🏽‍💻
+
+1284. The 1,284th member joined today.
+1285. And one more.
+
+- Level one with a long item that keeps going so it has to wrap onto a second line in a narrow panel
+  - Level two
+    - Level three
+      - Level four
+        - Level five
+          - Level six, deepest
+- [ ] Ask Bartholomew Fitzgerald-Montgomery III to countersign the enterprise renewal before the quarter closes
+
+| Customer | Plan | Seats | MRR | Owner | Next step |
+| --- | --- | --- | --- | --- | --- |
+| Northwind Industries Holdings | Enterprise annual | 1,284 | $48,250.00 | Aleksandra Wiśniewska-Kowalczyk | Countersign the renewal and send the invoice |
+| Jo | Pro | 1 | $20.00 | Jo | — |
+
+> A quote that holds an alert
+> > [!CAUTION]
+> > Nested caution inside a quote.
+
+```bash
+curl -X POST https://api.northwind-industries-holdings.example.com/v2/workspaces/ws_01HZX4Q8YQ7K3M9N2P5R6S8T0V/members/bulk-invite --data '{"emails":["bartholomew.fitzgerald@northwind-industries-holdings.example.com"]}'
+```
+"""
+
+WORST_BIG = "\n\n".join(
+    f"Paragraph {i}: " + " ".join(f"word{i}-{j}" for j in range(30)) for i in range(100)
+) + "\n\n" + "\n".join(f"- item {i} of the long list" for i in range(150))
+
+
 def answer(question, turn):
     interrupted.clear()
     emit({"type": "system", "subtype": "init", "cwd": os.getcwd(), "tools": ["Read", "WebSearch"], "parent_tool_use_id": None})
@@ -188,6 +230,24 @@ def answer(question, turn):
             result(None, is_error=True, subtype="error_during_execution")
         else:
             result("".join(words))
+        return
+    if "worst" in q:
+        if "empty" in q:
+            result("")
+            return
+        if "blank" in q:
+            text_block(0, ["   ", "\n\n  "])
+            result("   \n\n  ")
+            return
+        if "error" in q:
+            result("API Error: 529 {\"type\":\"error\",\"error\":{\"type\":\"overloaded_error\",\"message\":\"Overloaded\"},\"request_id\":\"req_011CXYZ4Q8YQ7K3M9N2P5R6S8T0V\"} while running mcp__claude_ai_Linear__list_issues for /Users/aleksandra.wisniewska-kowalczyk/Workbench/work/projects/northwind-industries-holdings-renewal", is_error=True, subtype="error_during_execution")
+            return
+        body = WORST_BIG if "big" in q else WORST_TEXT
+        # Real streams send small chunks: about 4 characters on average for a fast model.
+        size = 12 if "big" in q else 24
+        chunks = [body[i:i + size] for i in range(0, len(body), size)]
+        text_block(0, chunks, gap=0.003 if "big" in q else 0.0)
+        result(body)
         return
     if "kitchen" in q:
         body = KITCHEN_ONE if "one" in q else KITCHEN_TWO

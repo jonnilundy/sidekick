@@ -7,6 +7,11 @@ extension Color {
     static let sidekick = Color(red: 0.85, green: 0.47, blue: 0.34)
 }
 
+/// One spring for every size change, so width, height and content move as one piece.
+enum PanelMotion {
+    static let unfold = Animation.spring(response: 0.42, dampingFraction: 0.88)
+}
+
 /// The whole window: a transparent area with the card hanging at the top right.
 struct PanelView: View {
     @Bindable var model: PanelModel
@@ -14,11 +19,12 @@ struct PanelView: View {
     var body: some View {
         PanelCard(model: model)
             .frame(width: model.isCompact ? PanelMetrics.compactWidth : PanelMetrics.cardWidth)
-            .animation(.spring(response: 0.36, dampingFraction: 0.86), value: model.isCompact)
-            .onGeometryChange(for: CGSize.self, of: { $0.size }) { model.onCardSize?($0) }
-            .offset(x: model.shown || model.reduceMotion ? 0 : PanelMetrics.cardWidth + PanelMetrics.edgeGap + 24)
-            .scaleEffect(model.shown || model.reduceMotion ? 1 : 0.94, anchor: .trailing)
-            .opacity(model.shown ? 1 : 0)
+            .animation(PanelMotion.unfold, value: model.isCompact)
+            .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { model.onCardFrame?($0) }
+            // On and off the screen edge by sliding only: the window ends at the edge and clips the card.
+            // Reduced motion swaps the slide for a short fade.
+            .offset(x: model.shown || model.reduceMotion ? 0 : PanelMetrics.cardWidth + PanelMetrics.edgeGap + 40)
+            .opacity(model.reduceMotion && !model.shown ? 0 : 1)
             .padding(.top, PanelMetrics.top)
             .padding(.trailing, PanelMetrics.edgeGap)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
@@ -40,17 +46,16 @@ struct PanelCard: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if showsTranscript {
-                transcript
-                    .transition(.opacity.combined(with: .move(edge: .top)))
-                Divider().opacity(0.5)
-            }
+            // Always in the tree: its height springs from 0, so the card unfolds instead of jumping.
+            transcript
+                .opacity(showsTranscript ? 1 : 0)
+            Divider().opacity(showsTranscript ? 0.5 : 0).frame(height: showsTranscript ? nil : 0)
             inputRow
             // Pulling down stretches the card under the finger before the history opens.
             Color.clear.frame(height: max(0, stretch))
         }
         .overlay(alignment: .bottom) { grabber }
-        .animation(.spring(response: Spring.grow.response, dampingFraction: Spring.grow.damping), value: showsTranscript)
+        .animation(PanelMotion.unfold, value: showsTranscript)
         .background { CardBackground() }
         .clipShape(.rect(cornerRadius: PanelMetrics.cornerRadius, style: .continuous))
         .overlay {
@@ -69,6 +74,10 @@ struct PanelCard: View {
             VStack(alignment: .leading, spacing: 18) {
                 ForEach(model.visibleTurns) { turn in
                     TurnView(turn: turn, isLast: turn.id == conversation.turns.last?.id)
+                        // A sent question rises out of the field into its place.
+                        .transition(.asymmetric(
+                            insertion: .offset(y: 36).combined(with: .scale(scale: 0.96, anchor: .bottomTrailing)).combined(with: .opacity),
+                            removal: .opacity))
                 }
             }
             .padding(.horizontal, 18)
@@ -81,7 +90,8 @@ struct PanelCard: View {
         .scrollIndicators(transcriptHeight > model.maxTranscriptHeight ? .automatic : .never)
         .defaultScrollAnchor(.bottom, for: .sizeChanges)
         // Pushing up on an open history shrinks it under the finger before it tucks away.
-        .frame(height: max(1, min(max(transcriptHeight, 1), model.maxTranscriptHeight) + min(0, stretch)))
+        .frame(height: showsTranscript ? max(1, min(max(transcriptHeight, 1), model.maxTranscriptHeight) + min(0, stretch)) : 0)
+        .clipped()
         .animation(.spring(response: Spring.grow.response, dampingFraction: Spring.grow.damping), value: transcriptHeight)
     }
 
@@ -96,7 +106,7 @@ struct PanelCard: View {
                 .lineLimit(1...6)
                 .focused($focused)
                 .tint(.sidekick)
-                .onSubmit { model.submit() }
+                .onSubmit { withAnimation(PanelMotion.unfold) { model.submit() } }
                 .accessibilityIdentifier("sidekick-input")
             trailingButton
         }
@@ -196,7 +206,7 @@ struct TurnView: View {
             }
 
             if !turn.answer.isEmpty {
-                AnswerView(markdown: turn.answer)
+                AnswerView(markdown: turn.answer, streaming: turn.status == .running)
                     .overlay(alignment: .bottomTrailing) {
                         if hovering && turn.status != .running {
                             IconButton(symbol: copied ? "checkmark" : "doc.on.doc", help: "Copy answer (⇧⌘C)") {

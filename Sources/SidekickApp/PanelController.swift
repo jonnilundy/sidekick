@@ -30,8 +30,10 @@ final class PanelController {
     let panel: SidekickPanel
     private let hosting: NSHostingView<PanelView>
     private var mouseMonitor: Any?
-    private var shrinkWork: DispatchWorkItem?
-    private var cardHeight: CGFloat = 60
+    private var moveMonitors: [Any] = []
+    /// Where the card is, in window coordinates (AppKit, origin bottom left). Outside it the window
+    /// lets the pointer through to whatever is underneath.
+    private(set) var cardRect: NSRect = .zero
     /// The app that was in front when the panel opened. It gets the keyboard back when the panel goes.
     private var previousApp: NSRunningApplication?
     var onVisibilityChange: ((Bool) -> Void)?
@@ -75,7 +77,7 @@ final class PanelController {
         hosting.autoresizingMask = [.width, .height]
         panel.contentView = hosting
 
-        model.onCardSize = { [weak self] size in self?.cardSizeChanged(size) }
+        model.onCardFrame = { [weak self] rect in self?.cardFrameChanged(rect) }
         model.onHide = { [weak self] in self?.hide() }
         model.onNew = { [weak self] in self?.newConversation() }
         panel.keyHandler = { [weak self] event in self?.handleKey(event) ?? false }
@@ -131,6 +133,8 @@ final class PanelController {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in self?.debug("after focus") }
         }
         startMouseMonitor()
+        startMoveMonitors()
+        updatePointer()
     }
 
     /// Slides the card back out the way it came. The conversation stays until Reset.
@@ -138,6 +142,8 @@ final class PanelController {
         guard wantsShown else { return }
         wantsShown = false
         model.touch()
+        stopMoveMonitors()
+        panel.ignoresMouseEvents = true
         stopMouseMonitor()
         withAnimation(leaveAnimation) {
             model.shown = false
@@ -195,47 +201,48 @@ final class PanelController {
 
     // MARK: Geometry
 
-    /// Puts the window at the top right of the screen, under the menu bar, flush with the right edge.
+    /// The window covers the right strip of the screen, top to bottom, and never resizes. The card moves
+    /// inside it with SwiftUI springs only: resizing a window in step with an animation drops frames, and a
+    /// big shrink could leave the card undrawn. Clicks outside the card pass through (`updatePointer`).
     func place(on screen: NSScreen?) {
         guard let screen = screen ?? NSScreen.main else { return }
         let visible = screen.visibleFrame
-        model.maxTranscriptHeight = max(200, (visible.height - 140) * 0.78)
-        let height = windowHeight(for: cardHeight)
-        let frame = NSRect(x: visible.maxX - PanelMetrics.windowWidth, y: visible.maxY - height,
-                           width: PanelMetrics.windowWidth, height: height)
-        panel.setFrame(frame, display: false)
+        model.maxTranscriptHeight = max(200, visible.height - PanelMetrics.top - PanelMetrics.bottom - 72)
+        let frame = NSRect(x: visible.maxX - PanelMetrics.windowWidth, y: visible.minY,
+                           width: PanelMetrics.windowWidth, height: visible.height)
+        if panel.frame != frame { panel.setFrame(frame, display: false) }
     }
 
-    private func windowHeight(for card: CGFloat) -> CGFloat {
-        PanelMetrics.top + card + PanelMetrics.bottom
+    /// The card's frame from SwiftUI (top left origin) becomes a window rect (bottom left origin).
+    private func cardFrameChanged(_ rect: CGRect) {
+        let height = panel.frame.height
+        cardRect = NSRect(x: rect.minX, y: height - rect.maxY, width: rect.width, height: rect.height)
+        updatePointer()
     }
 
-    /// The card's layout size changed (a new answer line, a new turn). Grow the window at once so the
-    /// card can animate into the room; shrink it only after the card has finished shrinking.
-    private func cardSizeChanged(_ size: CGSize) {
-        guard size.height > 0, abs(size.height - cardHeight) > 0.5 else { return }
-        cardHeight = size.height
-        shrinkWork?.cancel()
-        let target = windowHeight(for: size.height)
-        if target >= panel.frame.height {
-            setWindowHeight(target)
-        } else {
-            let work = DispatchWorkItem { [weak self] in
-                guard let self else { return }
-                self.setWindowHeight(self.windowHeight(for: self.cardHeight))
-            }
-            shrinkWork = work
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6, execute: work)
-        }
+    /// The window takes the pointer only over the card (plus a little slop for the shadow edge and the
+    /// grabber); everywhere else, clicks and scrolls reach the app underneath.
+    private func updatePointer() {
+        guard wantsShown else { panel.ignoresMouseEvents = true; return }
+        // Never flip in the middle of a drag that started on the card.
+        guard NSEvent.pressedMouseButtons == 0 || panel.ignoresMouseEvents else { return }
+        let mouse = panel.convertPoint(fromScreen: NSEvent.mouseLocation)
+        panel.ignoresMouseEvents = !cardRect.insetBy(dx: -4, dy: -10).contains(mouse)
     }
 
-    private func setWindowHeight(_ height: CGFloat) {
-        var frame = panel.frame
-        guard abs(frame.height - height) > 0.5 else { return }
-        let top = frame.maxY
-        frame.size.height = height
-        frame.origin.y = top - height
-        panel.setFrame(frame, display: true)
+    /// For the probe: read the pointer again now (a warped cursor sends no move event).
+    func refreshPointer() { updatePointer() }
+
+    private func startMoveMonitors() {
+        guard moveMonitors.isEmpty else { return }
+        let handler: (NSEvent) -> Void = { [weak self] _ in MainActor.assumeIsolated { self?.updatePointer() } }
+        if let global = NSEvent.addGlobalMonitorForEvents(matching: [.mouseMoved], handler: handler) { moveMonitors.append(global) }
+        if let local = NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved], handler: { event in handler(event); return event }) { moveMonitors.append(local) }
+    }
+
+    private func stopMoveMonitors() {
+        moveMonitors.forEach(NSEvent.removeMonitor)
+        moveMonitors = []
     }
 
     // MARK: Keys and clicks

@@ -27,8 +27,9 @@ final class Probe: NSObject, NSApplicationDelegate {
         try? FileManager.default.createDirectory(at: outFolder, withIntermediateDirectories: true)
         app = AppDelegate(defaults: defaults, isProbe: true)
         app.applicationDidFinishLaunching(notification)
+        let worst = CommandLine.arguments.contains("worst")
         Task {
-            await run()
+            if worst { await runWorst() } else { await run() }
             app.conversation.shutdown()
             defaults.removePersistentDomain(forName: suite)
             if failures.isEmpty {
@@ -76,7 +77,7 @@ final class Probe: NSObject, NSApplicationDelegate {
     private func drag(by distance: CGFloat, hold: Bool = false) async {
         await pause(0.7)  // let the window settle to the card's size
         let cardWidth = model.isCompact ? PanelMetrics.compactWidth : PanelMetrics.cardWidth
-        let start = NSPoint(x: panel.frame.width - PanelMetrics.edgeGap - cardWidth / 2, y: PanelMetrics.bottom + 6)
+        let start = NSPoint(x: panel.frame.width - PanelMetrics.edgeGap - cardWidth / 2, y: app.panel.cardRect.minY + 6)
         func mouse(_ type: NSEvent.EventType, _ point: NSPoint) -> NSEvent {
             NSEvent.mouseEvent(with: type, location: point, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
                                windowNumber: panel.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!
@@ -103,7 +104,11 @@ final class Probe: NSObject, NSApplicationDelegate {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
         // A region, not the window alone, so the shadow and the desktop around the card show.
-        let f = panel.frame
+        let window = panel.frame
+        let card = app.panel.cardRect
+        // The card and its shadow, in screen coordinates.
+        let f = NSRect(x: window.minX, y: window.minY + max(0, card.minY - PanelMetrics.bottom),
+                       width: window.width, height: min(window.height, card.height + PanelMetrics.top + PanelMetrics.bottom))
         let screenTop = NSScreen.screens.first?.frame.maxY ?? f.maxY
         process.arguments = ["-x", "-R\(Int(f.minX)),\(Int(screenTop - f.maxY)),\(Int(f.width)),\(Int(f.height))", url.path]
         try? process.run()
@@ -112,6 +117,75 @@ final class Probe: NSObject, NSApplicationDelegate {
 
     private var textFieldHasFocus: Bool {
         (panel.firstResponder as? NSTextView)?.isFieldEditor == true || panel.firstResponder is NSTextView
+    }
+
+    /// `--probe out worst`: the break-ui pass. Worst-case questions and answers through the fake
+    /// claude, screenshots of each, and timings for the big one. Reports; it does not judge looks.
+    private func runWorst() async {
+        _ = await until(8) { conversation.spareProcessID != nil }
+        app.panel.show()
+        _ = await until(1) { panel.isVisible }
+        let paste = "Can you check whether the enterprise renewal for Northwind Industries Holdings (contract NW-2026-0001284, owner Aleksandra Wiśniewska-Kowalczyk, 1,284 seats) went through, what the final MRR was after the mid-term seat true-up, whether Bartholomew Fitzgerald-Montgomery III countersigned, and whether finance sent the invoice from https://northwind-industries-holdings.example.com/billing/invoices/INV-2026-000128400-enterprise-annual-renewal-final?view=pdf yet, and if not who owns the next step"
+        for (name, question) in [("worst-text", "\(paste) worst text"), ("worst-empty", "worst empty"), ("worst-text2", "\(paste) worst text"), ("worst-empty2", "worst empty"), ("worst-blank", "worst blank"), ("worst-error", "worst error")] {
+            _ = panel.performKeyEquivalent(with: key(45, "n", .command))
+            await pause(0.3)
+            model.input = question
+            await pause(0.2)
+            await type("")
+            let started = Date()
+            _ = await until(15) { !conversation.isRunning }
+            print("probe: \(name) took \(String(format: "%.2f", Date().timeIntervalSince(started)))s, status \(String(describing: conversation.turns.last?.status)), answer \(conversation.turns.last?.answer.count ?? 0) chars")
+            await pause(0.8)
+            print("probe: \(name) shown=\(model.shown) visible=\(panel.isVisible) frame=\(panel.frame) visibleTurns=\(model.visibleTurns.count) compact=\(model.isCompact)")
+            await shot("worst-\(name)")
+            if name == "worst-empty" {
+                let full = Process()
+                full.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+                full.arguments = ["-x", outFolder.appendingPathComponent("worst-empty-full.png").path]
+                try? full.run(); full.waitUntilExit()
+                print("probe: hosting frame \(panel.contentView?.frame ?? .zero) fitting \(panel.contentView?.fittingSize ?? .zero)")
+            }
+        }
+        // The big answer: 100 paragraphs and a 150 item list in 6 character chunks, like a fast stream.
+        _ = panel.performKeyEquivalent(with: key(45, "n", .command))
+        await type("worst big")
+        let started = Date()
+        var longestGap = 0.0
+        var last = Date()
+        var stalls: [String] = []
+        while Date().timeIntervalSince(started) < 120 {
+            let wasRunning = conversation.isRunning
+            try? await Task.sleep(for: .milliseconds(16))
+            let gap = Date().timeIntervalSince(last) - 0.016
+            longestGap = max(longestGap, gap)
+            if gap > 0.08 { stalls.append("\(Int(gap * 1000))ms@\(conversation.turns.last?.answer.count ?? 0)\(wasRunning ? "" : "-done")") }
+            last = Date()
+            if !wasRunning && !conversation.isRunning { break }
+        }
+        print("probe: worst-big stalls over 80 ms: \(stalls.joined(separator: " "))")
+        print("probe: worst-big took \(String(format: "%.2f", Date().timeIntervalSince(started)))s for \(conversation.turns.last?.answer.count ?? 0) chars, longest main-thread stall \(String(format: "%.0f", longestGap * 1000)) ms")
+        await pause(0.8)
+        await shot("worst-big")
+        // A day of questions: 40 turns, then pull the history open.
+        _ = panel.performKeyEquivalent(with: key(45, "n", .command))
+        for i in 0..<40 {
+            await type("question number \(i) of the day")
+            _ = await until(5) { !conversation.isRunning }
+        }
+        let t0 = Date()
+        app.panel.hide()
+        _ = await until(2) { !panel.isVisible }
+        app.panel.show()
+        _ = await until(2) { panel.isVisible }
+        print("probe: 40 turns, reopen took \(String(format: "%.2f", Date().timeIntervalSince(t0)))s")
+        await pause(0.8)
+        await shot("worst-40-turns")
+        // A 3,000 character paste into the field.
+        model.input = String(repeating: paste + " ", count: 7)
+        await pause(0.6)
+        await shot("worst-input-paste")
+        model.input = ""
+        passed += 1
     }
 
     private func run() async {
@@ -132,7 +206,7 @@ final class Probe: NSObject, NSApplicationDelegate {
         print("probe: after show active=\(NSApp.isActive) key=\(panel.isKeyWindow) keyWindow=\(String(describing: NSApp.keyWindow))")
         await pause(0.7)
         await shot("1-empty")
-        let emptyHeight = panel.frame.height
+        let emptyHeight = app.panel.cardRect.height
         check(model.isCompact, "the empty field is the compact, half-width card")
         model.input = "a question that needs the full width please"
         check(!model.isCompact, "longer text widens the card")
@@ -141,6 +215,18 @@ final class Probe: NSObject, NSApplicationDelegate {
         model.input = ""
         await pause(0.3)
 
+        // Outside the card the window lets clicks through; over it, it takes them.
+        let outside = panel.convertPoint(toScreen: NSPoint(x: 10, y: 10))
+        CGWarpMouseCursorPosition(CGPoint(x: outside.x, y: (NSScreen.screens.first?.frame.maxY ?? 0) - outside.y))
+        await pause(0.1)
+        app.panel.refreshPointer()
+        check(panel.ignoresMouseEvents, "clicks below the card pass through to the app underneath")
+        let over = panel.convertPoint(toScreen: NSPoint(x: app.panel.cardRect.midX, y: app.panel.cardRect.midY))
+        CGWarpMouseCursorPosition(CGPoint(x: over.x, y: (NSScreen.screens.first?.frame.maxY ?? 0) - over.y))
+        await pause(0.1)
+        app.panel.refreshPointer()
+        check(!panel.ignoresMouseEvents, "the card itself takes clicks")
+
         // Ask through real key events.
         await type("hello")
         check(conversation.isRunning || conversation.turns.last?.status == .done, "Return sends the question")
@@ -148,7 +234,8 @@ final class Probe: NSObject, NSApplicationDelegate {
         check(await until(5) { conversation.turns.last?.status == .done }, "the echo answer arrives")
         check(conversation.turns.last?.answer == "Echo: hello (turn 1)", "the answer text", conversation.turns.last?.answer ?? "nil")
         await pause(0.6)
-        check(panel.frame.height > emptyHeight + 40, "the panel grows for the answer", "\(emptyHeight) -> \(panel.frame.height)")
+        check(app.panel.cardRect.height > emptyHeight + 40, "the card grows for the answer", "\(emptyHeight) -> \(app.panel.cardRect.height)")
+        check(abs(app.panel.cardRect.maxY - (panel.frame.height - PanelMetrics.top)) < 1, "the card hangs from the top of the window", "\(app.panel.cardRect)")
         await shot("2-answer")
 
         // A follow-up with a tool call, and a long markdown answer.

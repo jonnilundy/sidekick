@@ -13,7 +13,7 @@ APP=build/Sidekick.app/Contents/MacOS/Sidekick
 screencapture -x -v -V 40 out/probe.mov >/dev/null 2>&1 &
 REC=$!
 sleep 1
-SIDEKICK_DEBUG=${SIDEKICK_DEBUG:-} SIDEKICK_CLAUDE_PATH="$PWD/scripts/fake-claude" FAKE_CLAUDE_DELAY=1 "$APP" --probe out > out/probe.log 2>&1
+SIDEKICK_DEBUG=${SIDEKICK_DEBUG:-} SIDEKICK_CLAUDE_PATH="$PWD/scripts/fake-claude" FAKE_CLAUDE_DELAY=1 "$APP" --probe out ${1:-} > out/probe.log 2>&1
 CODE=$?
 sleep 1
 kill -INT $REC 2>/dev/null; wait $REC 2>/dev/null

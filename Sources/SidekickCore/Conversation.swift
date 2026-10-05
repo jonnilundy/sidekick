@@ -51,6 +51,12 @@ public final class Conversation {
     /// The session died or was replaced mid-conversation; the next turn says so.
     @ObservationIgnored private var sessionLost = false
     @ObservationIgnored private var nextID = 0
+    /// Text that arrived but is not on screen yet. Deltas come many times a frame on a fast stream;
+    /// showing them in batches keeps the main thread free for drawing.
+    @ObservationIgnored private var pendingText = ""
+    @ObservationIgnored private var flushScheduled = false
+    /// How often batched text reaches the screen.
+    @ObservationIgnored public var textBatchInterval: TimeInterval = 1.0 / 30
 
     public struct SetupError: Error, Equatable {
         public let message: String
@@ -142,6 +148,7 @@ public final class Conversation {
     /// Stops the current answer and keeps what arrived so far.
     public func stop() {
         guard isRunning else { return }
+        flushText()
         stopRequested = true
         session?.interrupt()
         // If claude does not confirm quickly, end the turn anyway so the panel never hangs. That session
@@ -189,6 +196,7 @@ public final class Conversation {
     }
 
     private func endSession() {
+        pendingText = ""
         session?.onEvent = nil
         session?.stop()
         session = nil
@@ -216,11 +224,14 @@ public final class Conversation {
         case .model(let id):
             if lastModel != id { lastModel = id; onModel?(id) }
         case .text(let text):
-            turns[index].answer += text
-            turns[index].activity = nil
+            pendingText += text
+            if turns[index].activity != nil { turns[index].activity = nil }
+            scheduleFlush()
         case .tool(let name, let detail):
+            flushText()
             turns[index].activity = ToolLabel.label(name: name, detail: detail)
         case .done(let isError, let text):
+            flushText()
             if stopRequested {
                 finish(.stopped)
             } else if isError {
@@ -232,6 +243,7 @@ public final class Conversation {
                 finish(.done)
             }
         case nil:
+            flushText()
             self.session = nil
             sessionLost = true
             let code: Int32 = if case .exited(let code) = session.state { code } else { -1 }
@@ -239,7 +251,25 @@ public final class Conversation {
         }
     }
 
+    private func scheduleFlush() {
+        guard !flushScheduled else { return }
+        flushScheduled = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + textBatchInterval) { [weak self] in
+            MainActor.assumeIsolated { self?.flushText() }
+        }
+    }
+
+    /// Moves batched text onto the running turn.
+    private func flushText() {
+        flushScheduled = false
+        guard !pendingText.isEmpty else { return }
+        defer { pendingText = "" }
+        guard let index = turns.indices.last, turns[index].status == .running else { return }
+        turns[index].answer += pendingText
+    }
+
     private func finish(_ status: Status) {
+        flushText()
         guard let index = turns.indices.last, turns[index].status == .running else { return }
         turns[index].status = status
         turns[index].activity = nil

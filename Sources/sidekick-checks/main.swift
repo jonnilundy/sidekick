@@ -206,6 +206,20 @@ do {
     check(Markdown.prettyMath("\\sum_{n=1}^{\\infty} \\frac{1}{n^2}") == "∑\(InlineMark.sub.wrap("n=1"))\(InlineMark.sup.wrap("∞")) 1/n\(InlineMark.sup.wrap("2"))", "pretty math block", Markdown.prettyMath("\\sum_{n=1}^{\\infty} \\frac{1}{n^2}"))
     check(Markdown.prettyMath("\\frac{a+b}{2}") == "(a+b)/2", "fractions keep parentheses only when needed")
     check(Markdown.blocks("Text[^1].\n\n---\n\n[^1]: Note.").contains(.rule) == false, "no rule right before footnotes")
+    // Streaming parse: every prefix of a real answer parses the same as the whole text would, settled.
+    let sample = "Answer first.\n\nWorth knowing:\n- one\n- two\n  wrapped\n\n```swift\nlet a = 1\n\nlet b = 2\n```\n\n| a | b |\n| - | - |\n| 1 | 2 |\n\n> quote\n\nDone."
+    let streamer = StreamingMarkdown()
+    var prefixesMatch = true
+    var cut = sample.startIndex
+    while cut < sample.endIndex {
+        cut = sample.index(after: cut)
+        let prefix = String(sample[..<cut])
+        // Block boundaries can differ mid-line; compare at line ends, which is what settles.
+        if prefix.hasSuffix("\n") && streamer.blocks(prefix) != Markdown.blocks(prefix) { prefixesMatch = false; print("FAIL streaming prefix: \(prefix.debugDescription)") }
+    }
+    check(prefixesMatch, "streaming parse matches a full parse at every line end")
+    check(streamer.blocks(sample) == Markdown.blocks(sample), "streaming parse of the whole answer matches")
+
     // Odd streamed input must not hang or crash.
     for odd in ["<details>", "> [!NOTE]", "[^", "$$", "|", "- [", "1.", "   ", "```", "[a]: ", "<summary>x", "* * *", "\\"] {
         _ = Markdown.blocks(odd)

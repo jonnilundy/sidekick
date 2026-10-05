@@ -5,9 +5,14 @@ import SidekickCore
 /// plus the `InlineMark`s the parser leaves for underline, highlight, sub, sup, keys and math.
 struct AnswerView: View {
     let markdown: String
+    /// Kept for callers; parsing is incremental either way.
+    var streaming = false
+    @State private var parser = StreamingMarkdown()
 
     var body: some View {
-        BlocksView(blocks: Markdown.blocks(markdown))
+        // The streaming parser matches a full parse (a check proves it) and keeps its work, so a finished
+        // answer does not pay for one more full parse at the end.
+        BlocksView(blocks: parser.blocks(markdown))
             .textSelection(.enabled)
             .frame(maxWidth: .infinity, alignment: .leading)
             // Answers are model output. Only web and mail links open; file:, app schemes and the rest do not.
@@ -25,13 +30,14 @@ struct BlocksView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
             ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
-                BlockView(block: block)
+                // Equatable: blocks that did not change skip their body while an answer streams.
+                BlockView(block: block).equatable()
             }
         }
     }
 }
 
-struct BlockView: View {
+struct BlockView: View, Equatable {
     let block: MarkdownBlock
 
     var body: some View {
@@ -94,17 +100,26 @@ struct ListBlock: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
             ForEach(Array(items.enumerated()), id: \.offset) { _, item in
-                HStack(alignment: .firstTextBaseline, spacing: 7) {
-                    marker(item)
-                    Inline.text(item.text)
-                        .font(.system(size: 14))
-                        .lineSpacing(2)
-                        .strikethrough(item.marker == .task(done: true), color: .secondary)
-                        .foregroundStyle(item.marker == .task(done: true) ? .secondary : .primary)
-                }
-                .padding(.leading, CGFloat(item.level) * 18)
+                // Equatable rows: a growing list redraws only its new rows.
+                ListRow(item: item).equatable()
             }
         }
+    }
+}
+
+struct ListRow: View, Equatable {
+    let item: ListItem
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 7) {
+            marker(item)
+            Inline.text(item.text)
+                .font(.system(size: 14))
+                .lineSpacing(2)
+                .strikethrough(item.marker == .task(done: true), color: .secondary)
+                .foregroundStyle(item.marker == .task(done: true) ? .secondary : .primary)
+        }
+        .padding(.leading, CGFloat(item.level) * 18)
     }
 
     @ViewBuilder private func marker(_ item: ListItem) -> some View {

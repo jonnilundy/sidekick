@@ -13,10 +13,11 @@ A native macOS quick-answer panel (SwiftPM, macOS 15+, Swift 6.4) that runs the 
 
 | Script | What it does | Safe on Jonni's Mac |
 | --- | --- | --- |
-| `scripts/test.sh` | Checks (142, about 10 s) and a compile of the app | Yes |
+| `scripts/test.sh` | Checks (144, about 13 s) and a compile of the app | Yes |
 | `scripts/test.sh --vm` | Then builds the app and runs the window probe in the VM | Yes (the window part runs in the VM) |
 | `$(swift build --show-bin-path)/sidekick-checks --live` | One real question through the real claude. Costs a few cents | Yes, no windows |
 | `scripts/build-app.sh` | Release build into `build/Sidekick.app`, ad hoc signed | Yes |
+| `scripts/vm-run.sh 'scripts/vm-test.sh worst'` | The break-ui pass: worst-case questions and answers (long paste, empty, blank, error, a 34K answer, 40 turns), screenshots and main-thread stall timings | Yes |
 | `scripts/vm-run.sh ['cmd']` | Syncs the repo and the built app to the Tart VM on iris-agi and runs `scripts/vm-test.sh` (or `cmd`). Results land in `build/vm-out/` | Yes |
 | `scripts/install.sh` | Builds, quits the running copy, installs to `/Applications`, starts it | Installs the real app |
 | `scripts/release.sh X.Y.Z [--publish]` | Bumps the version, tests, zips; with `--publish` tags and creates a GitHub release | Dry run by default |
@@ -32,7 +33,8 @@ A native macOS quick-answer panel (SwiftPM, macOS 15+, Swift 6.4) that runs the 
 ## Gotchas
 
 - `makeKey()` activates the app even for a `.nonactivatingPanel` on macOS 26. The panel remembers the app that was in front and activates it again on hide (`PanelController.returnFocus`).
-- The card slides with SwiftUI springs inside a window flush with the screen's right edge, so the slide never shows on a second display. `wantsShown` is the truth for show and hide decisions; `model.shown` follows a frame later.
+- The window is a fixed strip at the screen's right edge, full height, and never resizes: resizing in step with SwiftUI animations dropped frames, and a big shrink left the card undrawn. Outside the card the window sets `ignoresMouseEvents` from the pointer position (`PanelController.updatePointer`), so clicks reach the app underneath. The card slides on and off by offset only; the window clips it at the screen edge, so the slide never shows on a second display.
+- Streaming stays smooth because text deltas are batched (30 per second, `Conversation.textBatchInterval`), `StreamingMarkdown` parses only the newly settled part and the tail, `BlockView` and `ListRow` are Equatable, and each inline regex runs only when its trigger character is present. `wantsShown` is the truth for show and hide decisions; `model.shown` follows a frame later.
 - SwiftUI skips `withAnimation` completions when nothing changed on screen. `hide()` has a timed fallback.
 - The input row always lays out at full card width and the card clips it while compact (220 pt). A field that wraps at the narrow width keeps that wrap after the card widens.
 - `PanelModel.visibleFrom` hides earlier turns from view only; `Conversation.turns` keeps them all. The grabber decides open or close with `HistoryDrag.outcome` (projection at the 0.99 rate).

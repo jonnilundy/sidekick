@@ -385,13 +385,17 @@ public enum Markdown {
 
     static func rewrite(_ text: String, references: [String: String]) -> String {
         guard !text.isEmpty else { return text }
+        // Swift regexes cost real time per call, and most lines hold none of this syntax. Each step runs
+        // only when its trigger character is present, which keeps long streamed answers smooth.
+        let hasBracket = text.contains("["), hasTag = text.contains("<"), hasDollar = text.contains("$"), hasColon = text.contains(":")
+        guard hasBracket || hasTag || hasDollar || hasColon else { return text }
         var s = text
         // Images become links: a quick panel does not load pictures.
-        s = s.replacing(/!\[([^\]]*)\]\(([^)\s]+)[^)]*\)/) { match in
+        if hasBracket { s = s.replacing(/!\[([^\]]*)\]\(([^)\s]+)[^)]*\)/) { match in
             "[🖼 \(match.1.isEmpty ? "image" : match.1)](\(match.2))"
-        }
+        } }
         // Reference links, full [text][id], collapsed [text][] and shortcut [id].
-        if !references.isEmpty {
+        if hasBracket, !references.isEmpty {
             s = s.replacing(/\[([^\]\^][^\]]*)\]\[([^\]]*)\]/) { match in
                 let key = (match.2.isEmpty ? String(match.1) : String(match.2)).lowercased()
                 guard let url = references[key] else { return String(match.0) }
@@ -404,7 +408,7 @@ public enum Markdown {
             }
         }
         // Footnote references become superscripts.
-        s = s.replacing(/\[\^([^\]]+)\]/) { match in InlineMark.sup.wrap(String(match.1)) }
+        if hasBracket { s = s.replacing(/\[\^([^\]]+)\]/) { match in InlineMark.sup.wrap(String(match.1)) } }
         // HTML tags with a markdown or mark equivalent.
         let tags: [(Regex<(Substring, Substring)>, (String) -> String)] = [
             (/(?is)<(?:b|strong)>(.*?)<\/(?:b|strong)>/, { "**\($0)**" }),
@@ -417,18 +421,20 @@ public enum Markdown {
             (/(?is)<sup>(.*?)<\/sup>/, { InlineMark.sup.wrap($0) }),
             (/(?is)<kbd>(.*?)<\/kbd>/, { InlineMark.key.wrap($0) }),
         ]
-        for (pattern, make) in tags {
-            s = s.replacing(pattern) { make(String($0.1)) }
+        if hasTag {
+            for (pattern, make) in tags {
+                s = s.replacing(pattern) { make(String($0.1)) }
+            }
+            s = s.replacing(/(?i)<br\s*\/?>/, with: "\n")
         }
-        s = s.replacing(/(?i)<br\s*\/?>/, with: "\n")
         // Inline math: $…$ that looks like math (has \ ^ _ { } or =), so "$5 and $10" stays money.
-        s = s.replacing(/(^|[^\\$\w])\$([^\s$](?:[^$\n]*[^\s$\\])?)\$(?![\w$])/) { match in
+        if hasDollar { s = s.replacing(/(^|[^\\$\w])\$([^\s$](?:[^$\n]*[^\s$\\])?)\$(?![\w$])/) { match in
             let body = String(match.2)
             guard body.contains(where: { "\\^_{}=".contains($0) }) else { return String(match.0) }
             return "\(match.1)" + InlineMark.math.wrap(prettyMath(body))
-        }
+        } }
         // Emoji codes.
-        s = s.replacing(/:([a-z0-9_+\-]+):/) { match in emoji[String(match.1)] ?? String(match.0) }
+        if hasColon { s = s.replacing(/:([a-z0-9_+\-]+):/) { match in emoji[String(match.1)] ?? String(match.0) } }
         return s
     }
 
@@ -465,4 +471,56 @@ public enum Markdown {
         "point_right": "👉", "question": "❓", "exclamation": "❗", "information_source": "ℹ️", "construction": "🚧",
         "hourglass": "⌛", "mag": "🔍", "pushpin": "📌", "email": "📧", "package": "📦", "gear": "⚙️", "100": "💯",
     ]
+}
+
+/// Parses a growing answer without starting over each time. The part up to the last blank line outside a
+/// code fence is settled: it is parsed once and kept. Only the tail after it is parsed again. Answers with
+/// footnotes or reference links (which reach across the whole text) are always parsed whole.
+public final class StreamingMarkdown {
+    private var settledSource = ""
+    private var settledBlocks: [MarkdownBlock] = []
+
+    public init() {}
+
+    public func blocks(_ source: String) -> [MarkdownBlock] {
+        if source.contains("[^") || source.contains("]: ") { return Markdown.blocks(source) }
+        let split = Self.settledEnd(source)
+        let settled = String(source[..<split])
+        if settled != settledSource {
+            // Append only: parse just the newly settled part. It starts after a blank line, so it parses
+            // the same on its own as inside the whole text.
+            if !settledSource.isEmpty, settled.hasPrefix(settledSource) {
+                settledBlocks += Markdown.blocks(String(settled.dropFirst(settledSource.count)))
+            } else {
+                settledBlocks = Markdown.blocks(settled)
+            }
+            settledSource = settled
+        }
+        let tail = String(source[split...])
+        return settledBlocks + Markdown.blocks(tail)
+    }
+
+    /// The index after the last blank line that is not inside a fenced code block, or the start.
+    static func settledEnd(_ source: String) -> String.Index {
+        var inFence = false
+        var lastBreak = source.startIndex
+        var lineStart = source.startIndex
+        var previousBlank = false
+        var index = source.startIndex
+        while index < source.endIndex {
+            let lineEnd = source[index...].firstIndex(of: "\n") ?? source.endIndex
+            let line = source[lineStart..<lineEnd].trimmingCharacters(in: .whitespaces)
+            if line.hasPrefix("```") || line.hasPrefix("~~~") { inFence.toggle() }
+            let blank = line.isEmpty
+            // A blank line followed by a line that starts flush left (not a list continuation) ends a block.
+            if previousBlank, !inFence, !blank, lineStart < source.endIndex, source[lineStart] != " " {
+                lastBreak = lineStart
+            }
+            previousBlank = blank && !inFence
+            guard lineEnd < source.endIndex else { break }
+            index = source.index(after: lineEnd)
+            lineStart = index
+        }
+        return lastBreak
+    }
 }

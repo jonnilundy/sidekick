@@ -31,8 +31,8 @@ final class PanelModel {
     @ObservationIgnored var dailyResetEnabled: () -> Bool = { true }
     @ObservationIgnored var onHide: (() -> Void)?
     @ObservationIgnored var onNew: (() -> Void)?
-    /// The card's full size from layout (target values, not the animated ones).
-    @ObservationIgnored var onCardSize: ((CGSize) -> Void)?
+    /// The card's frame in the window (SwiftUI coordinates), from layout.
+    @ObservationIgnored var onCardFrame: ((CGRect) -> Void)?
 
     init(conversation: Conversation) {
         self.conversation = conversation
