@@ -8,7 +8,7 @@ Written by the improve-animations audit on 2026-10-05 at commit 9ef3970. Each pl
 | 001 | Shorter hotkey slide in and out | HIGH | DONE |
 | 006 | Reduced motion hide eases out | LOW | DONE |
 | 007 | Subtle press scale | LOW | DONE |
-| 008 | One trailing button that morphs its symbol | LOW | TODO |
+| 008 | One trailing button that morphs its symbol | LOW | DONE |
 | 002 | Only a sent question rises; revealed history fades | MEDIUM | TODO |
 | 003 | Reduced motion covers unfold, rise and pull | MEDIUM | TODO |
 | 004 | No height spring on every streamed batch | MEDIUM | TODO |

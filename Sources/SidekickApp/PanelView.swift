@@ -184,13 +184,16 @@ struct PanelCard: View {
         model.focusRequest += 1
     }
 
+    /// One button: Stop while an answer runs, Reset after. The symbol morphs between them.
     @ViewBuilder private var trailingButton: some View {
-        if conversation.isRunning {
-            IconButton(symbol: "stop.fill", help: "Stop (⌘.)") { conversation.stop() }
-                .transition(.scale(scale: 0.6).combined(with: .opacity))
-        } else if !conversation.isEmpty && !model.isCompact {
-            IconButton(symbol: "arrow.counterclockwise", help: "Reset: start a fresh session (⌘N)") { model.onNew?() }
-                .transition(.scale(scale: 0.6).combined(with: .opacity))
+        let running = conversation.isRunning
+        if running || (!conversation.isEmpty && !model.isCompact) {
+            IconButton(symbol: running ? "stop.fill" : "arrow.counterclockwise",
+                       help: running ? "Stop (⌘.)" : "Reset: start a fresh session (⌘N)") {
+                if conversation.isRunning { conversation.stop() } else { model.onNew?() }
+            }
+            .animation(.snappy(duration: 0.2), value: running)
+            .transition(.scale(scale: 0.9).combined(with: .opacity))
         }
     }
 }
