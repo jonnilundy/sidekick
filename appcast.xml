@@ -5,5 +5,22 @@
         <link>https://raw.githubusercontent.com/jonnilundy/sidekick/main/appcast.xml</link>
         <description>Sidekick updates</description>
         <language>en</language>
+        <item>
+            <title>Version 0.2.0</title>
+            <pubDate>Mon, 05 Oct 2026 19:34:29 +0000</pubDate>
+            <sparkle:version>2</sparkle:version>
+            <sparkle:shortVersionString>0.2.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
+            <sparkle:fullReleaseNotesLink>https://github.com/jonnilundy/sidekick/releases/tag/v0.2.0</sparkle:fullReleaseNotesLink>
+            <description sparkle:format="markdown"><![CDATA[The first public release.
+
+- Press ⌥⌘Space, ask, read, press Esc. The card slides in from the right edge and gets out of the way.
+- Runs your own `claude` with your login, settings, skills and connectors. Answers come first, with a few "worth knowing" bullets.
+- One session all day, reset with ⌘N or at 5 AM. Nothing is saved to disk.
+- After 3 quiet minutes it opens as just the field; drag the bottom edge down for earlier questions.
+- Markdown renders while it streams: lists, tables, code, alerts, footnotes and math.
+- Updates itself through Sparkle, quietly: a dot on ✦ when an update is ready.]]></description>
+            <enclosure url="https://github.com/jonnilundy/sidekick/releases/download/v0.2.0/Sidekick-0.2.0.zip" length="1961534" type="application/octet-stream" sparkle:edSignature="DK4IVMguYeeBBFVaz+VS6uHcqNaMOwc7NJPBsv+qlpNSvKZE1b9xzfa8xgHjw0zW/PyoBa+72XI0NdroUQ8KCw=="/>
+        </item>
     </channel>
 </rss>
