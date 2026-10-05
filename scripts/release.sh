@@ -148,7 +148,8 @@ COMMANDS=(
     "git tag v$NEW_VERSION"
     "git push -q origin v$NEW_VERSION"
     "gh release create v$NEW_VERSION build/$ZIP_NAME --repo $REPO --title 'Sidekick $NEW_VERSION' $NOTES_ARG"
-    "git push -q origin main"
+    # HEAD, not main: releases run from a worktree on its own branch (code-AGENTS.md).
+    "git push -q origin HEAD:main"
 )
 
 if [[ "$PUBLISH" == "--publish" ]]; then
