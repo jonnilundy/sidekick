@@ -94,6 +94,19 @@ struct PanelCard: View {
         turn.id == conversation.turns.last?.id && turn.status == .running
     }
 
+    /// Streaming growth lands at once: animating every batch would lay the transcript out each frame.
+    /// Sends, collapses and reveals still spring.
+    private func setTranscriptHeight(_ height: CGFloat) {
+        let growth = height - transcriptHeight
+        if model.reduceMotion || (conversation.isRunning && growth > 0 && growth < 80) {
+            var instant = Transaction()
+            instant.disablesAnimations = true
+            withTransaction(instant) { transcriptHeight = height }
+        } else {
+            withAnimation(PanelMotion.grow) { transcriptHeight = height }
+        }
+    }
+
     private var transcript: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
@@ -107,7 +120,7 @@ struct PanelCard: View {
             .padding(.top, 16)
             .padding(.bottom, 14)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { transcriptHeight = $0 }
+            .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { setTranscriptHeight($0) }
         }
         // Only when it really scrolls; otherwise a bar flashes while the card grows.
         .scrollIndicators(transcriptHeight > model.maxTranscriptHeight ? .automatic : .never)
@@ -115,7 +128,6 @@ struct PanelCard: View {
         // Pushing up on an open history shrinks it under the finger before it tucks away.
         .frame(height: showsTranscript ? max(1, min(max(transcriptHeight, 1), model.maxTranscriptHeight) + min(0, stretch)) : 0)
         .clipped()
-        .animation(model.reduceMotion ? nil : PanelMotion.grow, value: transcriptHeight)
     }
 
     // MARK: Input
