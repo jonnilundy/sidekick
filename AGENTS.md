@@ -13,7 +13,7 @@ A native macOS quick-answer panel (SwiftPM, macOS 15+, Swift 6.4) that runs the 
 
 | Script | What it does | Safe on Jonni's Mac |
 | --- | --- | --- |
-| `scripts/test.sh` | Checks (85, about 6 s) and a compile of the app | Yes |
+| `scripts/test.sh` | Checks (103, about 10 s) and a compile of the app | Yes |
 | `scripts/test.sh --vm` | Then builds the app and runs the window probe in the VM | Yes (the window part runs in the VM) |
 | `$(swift build --show-bin-path)/sidekick-checks --live` | One real question through the real claude. Costs a few cents | Yes, no windows |
 | `scripts/build-app.sh` | Release build into `build/Sidekick.app`, ad hoc signed | Yes |
