@@ -14,6 +14,10 @@ enum PanelMotion {
     static let arrive = Animation.spring(response: Spring.arrive.response, dampingFraction: Spring.arrive.damping)
     /// The slide back out.
     static let leave = Animation.spring(response: Spring.leave.response, dampingFraction: Spring.leave.damping)
+    /// A sent question rises out of the field into its place.
+    static var rise: AnyTransition { AnyTransition.asymmetric(
+        insertion: .offset(y: 36).combined(with: .scale(scale: 0.96, anchor: .bottomTrailing)).combined(with: .opacity),
+        removal: .opacity) }
     /// Width, height and content changing together: a send, compact to full.
     static let unfold = Animation.spring(response: 0.42, dampingFraction: 0.88)
     /// Transcript height changes.
@@ -86,15 +90,17 @@ struct PanelCard: View {
 
     // MARK: Transcript
 
+    private func isJustSent(_ turn: Conversation.Turn) -> Bool {
+        turn.id == conversation.turns.last?.id && turn.status == .running
+    }
+
     private var transcript: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 ForEach(model.visibleTurns) { turn in
                     TurnView(turn: turn, isLast: turn.id == conversation.turns.last?.id)
-                        // A sent question rises out of the field into its place.
-                        .transition(.asymmetric(
-                            insertion: .offset(y: 36).combined(with: .scale(scale: 0.96, anchor: .bottomTrailing)).combined(with: .opacity),
-                            removal: .opacity))
+                        // Only the question just sent rises; turns revealed by the pull fade in where they are.
+                        .transition(isJustSent(turn) ? PanelMotion.rise : .opacity)
                 }
             }
             .padding(.horizontal, 18)
