@@ -179,9 +179,12 @@ final class PanelController {
     }
 
     func newConversation() {
-        model.conversation.reset()
-        model.resetVisibility()
-        model.input = ""
+        // The card folds back to the field on the same spring a send unfolds it with.
+        withAnimation(model.reduceMotion ? PanelMotion.fadeIn : PanelMotion.unfold) {
+            model.conversation.reset()
+            model.resetVisibility()
+            model.input = ""
+        }
         model.focusRequest += 1
     }
 
