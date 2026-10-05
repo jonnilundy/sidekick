@@ -1,4 +1,4 @@
-<p align="center"><img src="assets/screenshot-dark.png" alt="Sidekick's black card at the top right of a Mac screen, answering a git question with a one line answer and a code block" width="560"></p>
+<p align="center"><img src="assets/screenshot-dark.png" alt="Sidekick's black card under the menu bar at the top right of a Mac screen. Two questions in tinted bubbles: the time difference between San Francisco and Tokyo, answered as 16 hours ahead with three bullets, and the best time for a call, answered with a small table" width="560"></p>
 
 # Sidekick
 
