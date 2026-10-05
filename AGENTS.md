@@ -1,12 +1,13 @@
 # Sidekick
 
-A native macOS quick-answer panel (SwiftPM, macOS 15+, Swift 6.4) that runs the user's `claude` CLI. Private repo. It runs Claude Code on the user's own login, so builds are for Jonni only: releases go to this private repo's GitHub releases, never anywhere public.
+A native macOS quick-answer panel (SwiftPM, macOS 15+, Swift 6.4) that runs the user's `claude` CLI. Public repo, MIT license (made public by Jonni on 2026-10-05). Releases are signed zips on this repo's GitHub releases, delivered by Sparkle through `appcast.xml` on `main`; `scripts/release.sh` makes them.
 
 ## Layout
 
 - `Sources/SidekickCore`: everything that runs without a window. The claude process (`ClaudeProcess`), the stream-json parser, the session (`Conversation`), markdown blocks, springs, the daily reset, settings.
 - `Sources/SidekickApp`: the panel (`PanelController`, `PanelView`, `AnswerView`), the menu bar item and hotkey (`AppDelegate`), Settings, and the window probe (`Probe`).
-- `Sources/sidekick-checks`: plain checks for the core, against `scripts/fake-claude`.
+- `Sources/sidekick-checks`: plain checks for the core, against `scripts/fake-claude`, plus the update checks (`UpdateChecks.swift`).
+- `appcast.xml`: the Sparkle feed, newest release first. Written by `scripts/release.sh`.
 - `scripts/fake-claude`: a stand-in for `claude -p` with the same stream-json shapes. Behavior depends on the question (`slow`, `stubborn`, `tool`, `fail`, `crash`, `long`, `kitchen one`, `kitchen two`). The kitchen answers hold every markdown form the panel renders.
 
 ## Scripts
