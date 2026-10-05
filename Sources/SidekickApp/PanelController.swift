@@ -192,11 +192,11 @@ final class PanelController {
     }
 
     private var arriveAnimation: Animation {
-        model.reduceMotion ? .easeOut(duration: 0.18) : .spring(response: Spring.arrive.response, dampingFraction: Spring.arrive.damping)
+        model.reduceMotion ? PanelMotion.fadeIn : PanelMotion.arrive
     }
 
     private var leaveAnimation: Animation {
-        model.reduceMotion ? .easeIn(duration: 0.14) : .spring(response: Spring.leave.response, dampingFraction: Spring.leave.damping)
+        model.reduceMotion ? PanelMotion.fadeOut : PanelMotion.leave
     }
 
     // MARK: Geometry

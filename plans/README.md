@@ -4,7 +4,7 @@ Written by the improve-animations audit on 2026-10-05 at commit 9ef3970. Each pl
 
 | # | Title | Severity | Status |
 | --- | --- | --- | --- |
-| 009 | One set of motion values, no double animation | LOW | TODO |
+| 009 | One set of motion values, no double animation | LOW | DONE |
 | 001 | Shorter hotkey slide in and out | HIGH | TODO |
 | 006 | Reduced motion hide eases out | LOW | TODO |
 | 007 | Subtle press scale | LOW | TODO |

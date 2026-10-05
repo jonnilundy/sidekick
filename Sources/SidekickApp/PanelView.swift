@@ -7,9 +7,27 @@ extension Color {
     static let sidekick = Color(red: 0.85, green: 0.47, blue: 0.34)
 }
 
-/// One spring for every size change, so width, height and content move as one piece.
+/// Every motion value in the panel. Spring values for the slide live in SidekickCore's `Spring` so
+/// checks can test them; this turns them into SwiftUI animations.
 enum PanelMotion {
+    /// The hotkey slide in from the screen edge.
+    static let arrive = Animation.spring(response: Spring.arrive.response, dampingFraction: Spring.arrive.damping)
+    /// The slide back out.
+    static let leave = Animation.spring(response: Spring.leave.response, dampingFraction: Spring.leave.damping)
+    /// Width, height and content changing together: a send, compact to full.
     static let unfold = Animation.spring(response: 0.42, dampingFraction: 0.88)
+    /// Transcript height changes.
+    static let grow = Animation.spring(response: Spring.grow.response, dampingFraction: Spring.grow.damping)
+    /// Pull release after a flick, and after a slow release.
+    static let pullFlick = Animation.spring(response: 0.42, dampingFraction: 0.8)
+    static let pullSettle = Animation.spring(response: 0.38, dampingFraction: 1)
+    /// Button press feedback.
+    static let press = Animation.spring(response: 0.18, dampingFraction: 1)
+    /// A details section opening or closing.
+    static let disclose = Animation.spring(response: 0.3, dampingFraction: 1)
+    /// Reduced motion: fades instead of slides.
+    static let fadeIn = Animation.easeOut(duration: 0.18)
+    static let fadeOut = Animation.easeIn(duration: 0.14)
 }
 
 /// The whole window: a transparent area with the card hanging at the top right.
@@ -55,7 +73,6 @@ struct PanelCard: View {
             Color.clear.frame(height: max(0, stretch))
         }
         .overlay(alignment: .bottom) { grabber }
-        .animation(PanelMotion.unfold, value: showsTranscript)
         .background { CardBackground() }
         .clipShape(.rect(cornerRadius: PanelMetrics.cornerRadius, style: .continuous))
         .overlay {
@@ -92,7 +109,7 @@ struct PanelCard: View {
         // Pushing up on an open history shrinks it under the finger before it tucks away.
         .frame(height: showsTranscript ? max(1, min(max(transcriptHeight, 1), model.maxTranscriptHeight) + min(0, stretch)) : 0)
         .clipped()
-        .animation(.spring(response: Spring.grow.response, dampingFraction: Spring.grow.damping), value: transcriptHeight)
+        .animation(PanelMotion.grow, value: transcriptHeight)
     }
 
     // MARK: Input
@@ -154,7 +171,7 @@ struct PanelCard: View {
     private func finishPull(translation: CGFloat, velocity: CGFloat) {
         let outcome = HistoryDrag.outcome(translation: Double(translation), velocity: Double(velocity), isOpen: model.historyOpen)
         // A flick hands its speed to the spring, a slow release settles calmly.
-        let animation: Animation = abs(velocity) > 300 ? .spring(response: 0.42, dampingFraction: 0.8) : .spring(response: 0.38, dampingFraction: 1)
+        let animation: Animation = abs(velocity) > 300 ? PanelMotion.pullFlick : PanelMotion.pullSettle
         withAnimation(animation) {
             switch outcome {
             case .open: model.showHistory()
@@ -327,7 +344,7 @@ struct PressScale: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .scaleEffect(configuration.isPressed ? 0.9 : 1)
-            .animation(.spring(response: 0.18, dampingFraction: 1), value: configuration.isPressed)
+            .animation(PanelMotion.press, value: configuration.isPressed)
     }
 }
 

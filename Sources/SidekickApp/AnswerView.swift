@@ -197,7 +197,7 @@ struct DetailsBlock: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Button {
-                withAnimation(.spring(response: 0.3, dampingFraction: 1)) { open.toggle() }
+                withAnimation(PanelMotion.disclose) { open.toggle() }
             } label: {
                 HStack(spacing: 6) {
                     Image(systemName: "chevron.right")
