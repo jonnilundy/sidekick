@@ -193,7 +193,8 @@ struct PanelCard: View {
                 ForEach(model.visibleTurns) { turn in
                     TurnView(turn: turn, isLast: turn.id == conversation.turns.last?.id,
                              hidesQuestion: flight?.turnID == turn.id,
-                             onBubbleFrame: { frame in bubbleLanded(turn.id, at: frame) })
+                             onBubbleFrame: { frame in bubbleLanded(turn.id, at: frame) },
+                             reduceMotion: model.reduceMotion)
                         // The question just sent arrives by the flight (or rises, when there is no flight);
                         // turns revealed by the pull fade in where they are.
                         .transition(model.reduceMotion || flight?.turnID == turn.id || !isJustSent(turn) ? .opacity : PanelMotion.rise)
@@ -277,6 +278,10 @@ struct PanelCard: View {
                 .help(model.historyOpen ? "Push up to hide earlier questions" : "Pull down for earlier questions")
                 .accessibilityLabel(model.historyOpen ? "Hide earlier questions" : "Show earlier questions")
                 .accessibilityAddTraits(.isButton)
+                // VoiceOver cannot drag. ⌘↓ and ⌘↑ do the same from the keyboard (PanelController.handleKey).
+                .accessibilityAction(named: model.historyOpen ? "Hide earlier questions" : "Show earlier questions") {
+                    finishPull(translation: model.historyOpen ? -100 : 100, velocity: 0)
+                }
                 .transition(.opacity)
         }
     }
@@ -387,18 +392,102 @@ struct FlyingQuestion: View, Animatable {
 /// The tinted bubble a question sits in. `fill` fades the bubble's tint in while the text flies.
 struct QuestionBubble: View {
     let text: String
-    let lineLimit: Int
+    /// nil shows every line.
+    let lineLimit: Int?
     var fill: Double = 1
+    /// When set, reports whether the line limit cuts the text.
+    var onTruncation: ((Bool) -> Void)?
+    @State private var shownHeight: CGFloat = 0
+    @State private var fullHeight: CGFloat = 0
 
     var body: some View {
         Text(text)
             .font(.system(size: SendFlight.bubbleFontSize, weight: .medium))
             .foregroundStyle(.primary)
             .lineLimit(lineLimit)
+            .background {
+                // The same text with no limit, at the same width. Taller than the shown text means cut.
+                if onTruncation != nil {
+                    Text(text)
+                        .font(.system(size: SendFlight.bubbleFontSize, weight: .medium))
+                        .fixedSize(horizontal: false, vertical: true)
+                        .hidden()
+                        .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { fullHeight = $0; reportTruncation() }
+                }
+            }
+            .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { shownHeight = $0; reportTruncation() }
             .padding(.horizontal, SendFlight.bubblePadding)
             .padding(.vertical, 7)
             .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Color.sidekick.opacity(0.16 * fill)))
             .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Color.sidekick.opacity(0.22 * fill), lineWidth: 0.5))
+    }
+
+    private func reportTruncation() {
+        guard let onTruncation, shownHeight > 0, fullHeight > 0 else { return }
+        onTruncation(fullHeight > shownHeight + 1)
+    }
+}
+
+/// Calls `action` on a plain click inside its frame, seen from a local event monitor because the
+/// selectable text on top takes the mouse. A drag (text selection) or the second click of a double
+/// click (word selection) is not a plain click.
+struct PlainClick: View {
+    let action: () -> Void
+    @State private var frame: CGRect = .zero
+    @State private var monitor: Any?
+    @State private var downAt: NSPoint?
+
+    var body: some View {
+        Color.clear
+            .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { frame = $0 }
+            .onAppear {
+                monitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .leftMouseUp]) { event in
+                    MainActor.assumeIsolated { handle(event) }
+                    return event
+                }
+            }
+            .onDisappear {
+                if let monitor { NSEvent.removeMonitor(monitor) }
+                monitor = nil
+            }
+    }
+
+    private func handle(_ event: NSEvent) {
+        guard event.window is SidekickPanel, let point = point(of: event) else { return }
+        guard event.type == .leftMouseDown else { finish(event); return }
+        downAt = event.clickCount == 1 && frame.contains(point) ? point : nil
+        guard downAt != nil, let window = event.window else { return }
+        let downOnScreen = window.convertPoint(toScreen: event.locationInWindow)
+        waitForMouseUp(from: downOnScreen, tries: 300)
+    }
+
+    /// The text's selection loop reads the mouse up itself, so the monitor never sees it. Wait for the
+    /// button to come up, then compare where the pointer is with where it went down.
+    private func waitForMouseUp(from start: NSPoint, tries: Int) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.016) {
+            guard downAt != nil else { return }
+            if NSEvent.pressedMouseButtons & 1 != 0 {
+                if tries > 0 { waitForMouseUp(from: start, tries: tries - 1) } else { downAt = nil }
+                return
+            }
+            downAt = nil
+            let end = NSEvent.mouseLocation
+            if hypot(end.x - start.x, end.y - start.y) < 4 { action() }
+        }
+    }
+
+    /// A mouse up the monitor does see (the text did not take the click).
+    private func finish(_ up: NSEvent) {
+        guard let start = downAt, let point = point(of: up) else { return }
+        downAt = nil
+        if up.clickCount == 1, hypot(point.x - start.x, point.y - start.y) < 4, frame.contains(point) { action() }
+    }
+
+    /// The event's location in global SwiftUI coordinates (origin at the top left of the hosting view).
+    private func point(of event: NSEvent) -> NSPoint? {
+        guard let content = event.window?.contentView else { return nil }
+        let local = content.convert(event.locationInWindow, from: nil)
+        return NSPoint(x: local.x, y: content.isFlipped ? local.y : content.bounds.height - local.y)
     }
 }
 
@@ -409,8 +498,18 @@ struct TurnView: View {
     /// True while this question is still flying in from the field; the flight draws it meanwhile.
     var hidesQuestion = false
     var onBubbleFrame: (CGRect) -> Void = { _ in }
+    var reduceMotion = false
     @State private var hovering = false
     @State private var copied = false
+    /// A long question is cut to a few lines; a click on the bubble shows it whole.
+    @State private var expanded = false
+    @State private var truncated = false
+
+    private var canExpand: Bool { expanded || truncated }
+
+    private func toggleExpanded() {
+        withAnimation(reduceMotion ? PanelMotion.fadeIn : PanelMotion.unfold) { expanded.toggle() }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -421,13 +520,20 @@ struct TurnView: View {
             }
             HStack(spacing: 0) {
                 Spacer(minLength: 48)
-                QuestionBubble(text: turn.question, lineLimit: isLast ? 8 : 3)
+                QuestionBubble(text: turn.question, lineLimit: expanded ? nil : (isLast ? 8 : 3),
+                               onTruncation: { cut in if !expanded { truncated = cut } })
                     .textSelection(.enabled)
+                    // Selectable text takes the mouse, so SwiftUI tap gestures never fire on it.
+                    .background { if canExpand { PlainClick(action: toggleExpanded) } }
+                    .help(canExpand ? (expanded ? "Click to shorten the question" : "Click to show the whole question") : "")
+                    .accessibilityAction(named: expanded ? "Shorten question" : "Show whole question") {
+                        if canExpand { toggleExpanded() }
+                    }
                     .opacity(hidesQuestion ? 0 : 1)
                     .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .named(SendFlight.space)) }) { onBubbleFrame($0) }
             }
 
-            if !turn.answer.isEmpty {
+            if !Self.isBlank(turn.answer) {
                 AnswerView(markdown: turn.answer, streaming: turn.status == .running)
                     .overlay(alignment: .bottomTrailing) {
                         if hovering && turn.status != .running {
@@ -453,7 +559,7 @@ struct TurnView: View {
     @ViewBuilder private var status: some View {
         switch turn.status {
         case .running:
-            if turn.answer.isEmpty || turn.activity != nil {
+            if Self.isBlank(turn.answer) || turn.activity != nil {
                 Thinking(label: turn.activity ?? "Thinking")
             }
         case .stopped:
@@ -469,8 +575,24 @@ struct TurnView: View {
             .font(.system(size: 12.5))
             .foregroundStyle(.secondary)
         case .done:
-            EmptyView()
+            // A blank answer would leave nothing under the question, as if nothing happened.
+            if Self.isBlank(turn.answer) {
+                Label("No answer came back.", systemImage: "circle.dashed")
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(.tertiary)
+                    .onAppear { TurnView.noAnswerLabels += 1 }
+                    .onDisappear { TurnView.noAnswerLabels -= 1 }
+            }
         }
+    }
+
+    /// How many "No answer came back." labels are on screen. The probe reads it: SwiftUI builds no
+    /// accessibility tree to search without an assistive app running.
+    static var noAnswerLabels = 0
+
+    /// Empty or only spaces and line breaks.
+    static func isBlank(_ answer: String) -> Bool {
+        answer.allSatisfy(\.isWhitespace)
     }
 }
 

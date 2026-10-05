@@ -257,6 +257,11 @@ final class PanelController {
             return true
         }
         guard flags.contains(.command) else { return false }
+        // ⌘↓ shows the earlier questions and ⌘↑ tucks them away, like the grabber. Otherwise the
+        // field keeps the keys (start and end of the text).
+        if event.keyCode == 125 || event.keyCode == 126 {
+            return moveHistory(show: event.keyCode == 125)
+        }
         let key = event.charactersIgnoringModifiers?.lowercased() ?? ""
         let shift = flags.contains(.shift)
         switch key {
@@ -274,6 +279,17 @@ final class PanelController {
         case "z": return NSApp.sendAction(shift ? Selector(("redo:")) : Selector(("undo:")), to: nil, from: nil)
         default: return false
         }
+    }
+
+    /// The keyboard's grabber. False when there is nothing to show or hide, so the field gets the key.
+    private func moveHistory(show: Bool) -> Bool {
+        let can = show ? model.hiddenCount > 0 : model.historyOpen && !model.conversation.isRunning
+        guard can else { return false }
+        withAnimation(model.reduceMotion ? PanelMotion.fadeIn : PanelMotion.unfold) {
+            if show { model.showHistory() } else { model.hideHistory() }
+        }
+        model.touch()
+        return true
     }
 
     func copyLastAnswer() {
