@@ -57,7 +57,10 @@ if [[ "$PUBLISH" == "--publish" ]]; then
     for var in SIDEKICK_SPARKLE_KEY_FILE SIDEKICK_DOWNLOAD_BASE SIDEKICK_BUNDLE_ID SIDEKICK_FEED_URL SIDEKICK_PUBLIC_KEY SIDEKICK_VERSION SIDEKICK_BUILD SIDEKICK_APP_OUT; do
         [[ -z "${!var:-}" ]] || fail "$var is a test override; unset it before --publish"
     done
-    [[ "$(git rev-parse --abbrev-ref HEAD)" == "main" ]] || fail "--publish runs from main"
+    # Any branch or worktree may publish, as long as it holds everything on origin/main: the push at the
+    # end is HEAD:main, and it must be a fast forward.
+    git fetch -q origin main || fail "could not fetch origin/main"
+    git merge-base --is-ancestor origin/main HEAD || fail "--publish needs everything on origin/main; rebase first"
     command -v gh >/dev/null || fail "gh is not installed"
 fi
 
