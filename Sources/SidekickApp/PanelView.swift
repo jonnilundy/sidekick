@@ -27,7 +27,7 @@ enum PanelMotion {
     static let disclose = Animation.spring(response: 0.3, dampingFraction: 1)
     /// Reduced motion: fades instead of slides.
     static let fadeIn = Animation.easeOut(duration: 0.18)
-    static let fadeOut = Animation.easeIn(duration: 0.14)
+    static let fadeOut = Animation.easeOut(duration: 0.14)
 }
 
 /// The whole window: a transparent area with the card hanging at the top right.
