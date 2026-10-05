@@ -3,7 +3,8 @@ import KeyboardShortcuts
 import SwiftUI
 import SidekickCore
 
-/// Five settings, nothing else. Every change applies to the next question.
+/// A few settings, nothing else. A change to folder, model or effort starts a new session at the
+/// next question (the panel says so).
 struct SettingsView: View {
     let defaults: UserDefaults
     @AppStorage(Preferences.Key.folder) private var folder = Preferences.defaultFolder()

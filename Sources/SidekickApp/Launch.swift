@@ -6,6 +6,8 @@ import SidekickCore
 public enum Launch {
     @MainActor
     public static func run() {
+        // Writing to a claude that just exited must not end the app.
+        signal(SIGPIPE, SIG_IGN)
         let app = NSApplication.shared
         app.setActivationPolicy(.accessory)
         let args = CommandLine.arguments

@@ -13,6 +13,11 @@ struct AnswerView: View {
         }
         .textSelection(.enabled)
         .frame(maxWidth: .infinity, alignment: .leading)
+        // Answers are model output. Only web and mail links open; file:, app schemes and the rest do not.
+        .environment(\.openURL, OpenURLAction { url in
+            guard let scheme = url.scheme?.lowercased(), ["http", "https", "mailto"].contains(scheme) else { return .discarded }
+            return .systemAction
+        })
     }
 
     @ViewBuilder private func view(for block: MarkdownBlock) -> some View {

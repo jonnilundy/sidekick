@@ -113,7 +113,21 @@ do {
     let path = ShellEnvironment.withFallbackPath(["PATH": "/a"], home: "/h")["PATH"] ?? ""
     check(path.hasPrefix("/a:") && path.contains("/h/.local/bin") && path.contains("/opt/homebrew/bin"), "fallback PATH adds tool folders", path)
     let live = ShellEnvironment.load(timeout: 8)
-    check(live["HOME"] != nil && (live["PATH"] ?? "").contains("/usr/bin"), "login shell env loads")
+    check(live["HOME"] != nil && (live["PATH"] ?? "").contains("/usr/bin") && ShellEnvironment.lastFallbackReason == nil,
+          "login shell env loads", ShellEnvironment.lastFallbackReason ?? "")
+
+    // A shell that never finishes, and one that leaves a job holding the pipe: both must return fast.
+    let tmpShell = FileManager.default.temporaryDirectory.appendingPathComponent("sidekick-shell-\(getpid())")
+    FileManager.default.createFile(atPath: tmpShell.path, contents: Data("#!/bin/sh\ntrap '' TERM\nsleep 30\n".utf8), attributes: [.posixPermissions: 0o755])
+    var t0 = Date()
+    let hung = ShellEnvironment.load(base: ["SHELL": tmpShell.path, "PATH": "/usr/bin"], timeout: 0.5)
+    check(Date().timeIntervalSince(t0) < 2 && hung["PATH"]?.contains("/opt/homebrew/bin") == true && ShellEnvironment.lastFallbackReason != nil,
+          "a hung shell falls back fast", ShellEnvironment.lastFallbackReason ?? "")
+    FileManager.default.createFile(atPath: tmpShell.path, contents: Data("#!/bin/sh\n(sleep 30 &)\nprintf '%s\\0' __SIDEKICK_ENV_START__; printf 'FOO=bar\\0'\n".utf8), attributes: [.posixPermissions: 0o755])
+    t0 = Date()
+    let held = ShellEnvironment.load(base: ["SHELL": tmpShell.path], timeout: 3)
+    check(Date().timeIntervalSince(t0) < 1.5 && held["FOO"] == "bar", "a background job holding the pipe does not block", "\(Date().timeIntervalSince(t0))s \(held["FOO"] ?? "nil")")
+    try? FileManager.default.removeItem(at: tmpShell)
 }
 
 // MARK: Markdown
@@ -210,6 +224,8 @@ func conversationChecks() {
     env["FAKE_CLAUDE_LOG"] = log.path
     env["FAKE_CLAUDE_DELAY"] = "0.5"
     env["CLAUDECODE"] = "1"
+    env["ANTHROPIC_API_KEY"] = "sk-should-never-reach-claude"
+    env["ANTHROPIC_AUTH_TOKEN"] = "should-never-reach-claude"
     let config = ClaudeConfig(executable: fake, workingDirectory: tmp, model: "haiku", effort: "low", environment: env)
     var current: Result<ClaudeConfig, Conversation.SetupError> = .success(config)
     let conversation = Conversation(makeConfig: { current })
@@ -292,6 +308,55 @@ func conversationChecks() {
     conversation.ask("anything")
     check(conversation.setupProblem == "no claude here" && conversation.turns.last?.status == .failed("no claude here"), "a setup problem shows instead of an answer")
 
+    // Review fixes. A stop claude ignores: the session is replaced, and its late text never leaks.
+    current = .success(config)
+    conversation.reset()
+    conversation.stopGrace = 0.4
+    conversation.ask("stubborn")
+    _ = wait(2) { (conversation.turns.last?.answer.count ?? 0) > 5 }
+    let stubbornPID = conversation.sessionProcessID
+    conversation.stop()
+    check(wait(2) { !conversation.isRunning }, "a stop claude ignores still ends the turn")
+    conversation.ask("after that")
+    check(wait(5) { !conversation.isRunning }, "the next question after an ignored stop ends")
+    let next = conversation.turns.last
+    check(next?.answer == "Echo: after that (turn 1)", "no late text leaks into the next answer", next?.answer ?? "nil")
+    check(next?.notice?.contains("New session") == true, "the panel says a new session started", next?.notice ?? "nil")
+    if let stubbornPID { check(wait(4) { kill(stubbornPID, 0) != 0 }, "the stuck session is ended") }
+    conversation.stopGrace = 2
+
+    // A live session means no spare: one claude at a time.
+    check(conversation.spareProcessID == nil, "no spare runs beside a live session")
+    conversation.prewarm()
+    check(conversation.spareProcessID == nil, "prewarm does not start a spare beside a live session")
+
+    // A settings change starts a new session at the next question, and says so.
+    var sonnet = config
+    sonnet.model = "sonnet"
+    current = .success(sonnet)
+    let beforeChange = conversation.sessionProcessID
+    conversation.ask("model changed")
+    check(wait(5) { !conversation.isRunning }, "the turn after a settings change ends")
+    check(conversation.sessionProcessID != beforeChange, "a settings change starts a new session")
+    check(conversation.turns.last?.notice?.hasPrefix("Settings changed") == true, "the panel says settings changed", conversation.turns.last?.notice ?? "nil")
+    // An environment-only change (the login shell loading late) keeps the session.
+    var envOnly = sonnet
+    envOnly.environment["SOMETHING_NEW"] = "1"
+    current = .success(envOnly)
+    let same = conversation.sessionProcessID
+    conversation.ask("env changed")
+    check(wait(5) { !conversation.isRunning }, "the turn after an env change ends")
+    check(conversation.sessionProcessID == same && conversation.turns.last?.notice == nil, "an env-only change keeps the session")
+
+    // Keep warm off stops the spare at once.
+    conversation.reset()
+    check(conversation.spareProcessID != nil, "reset starts a spare")
+    let warmPID = conversation.spareProcessID
+    conversation.setKeepWarm(false)
+    check(conversation.spareProcessID == nil, "keep warm off drops the spare")
+    if let warmPID { check(wait(4) { kill(warmPID, 0) != 0 }, "keep warm off ends the spare process") }
+    conversation.setKeepWarm(true)
+
     let spare = conversation.spareProcessID
     conversation.shutdown()
     if let spare { check(wait(4) { kill(spare, 0) != 0 }, "shutdown ends the spare") }
@@ -301,6 +366,8 @@ func conversationChecks() {
     let realTmp = tmp.path.hasPrefix("/var/") ? "/private" + tmp.path : tmp.path
     check(logText.contains("cwd \(realTmp)") || logText.contains("cwd \(tmp.path)"), "claude runs in the chosen folder", String(logText.prefix(300)))
     check(logText.contains("interrupt"), "stop sent an interrupt")
+    check(!logText.contains("env ANTHROPIC") && !logText.contains("env CLAUDECODE") && logText.contains("env \n"),
+          "claude gets no API key and no nested-session marker, so it uses the CLI login")
 }
 
 MainActor.assumeIsolated { conversationChecks() }

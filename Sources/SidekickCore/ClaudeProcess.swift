@@ -8,6 +8,9 @@ public final class ClaudeProcess {
         case starting, ready, busy, exited(code: Int32)
     }
 
+    /// Auth variables that would make claude bill an API key instead of using the CLI login.
+    public static let apiKeyVariables = ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"]
+
     public private(set) var state: State = .starting
     public let config: ClaudeConfig
     public let startedAt = Date()
@@ -36,6 +39,8 @@ public final class ClaudeProcess {
         var env = config.environment
         // A Sidekick started from inside a Claude Code session must not look like a nested session.
         for key in env.keys where key == "CLAUDECODE" || key.hasPrefix("CLAUDE_CODE_") { env.removeValue(forKey: key) }
+        // Always the user's own Claude Code login (claude.ai subscription), never an API key from the shell.
+        for key in ClaudeProcess.apiKeyVariables { env.removeValue(forKey: key) }
         process.environment = env
         process.standardInput = stdin
         let out = Pipe()
@@ -43,15 +48,16 @@ public final class ClaudeProcess {
         process.standardOutput = out
         process.standardError = err
 
+        // The main queue is FIFO, so chunks arrive in order (separate Tasks do not promise that).
         out.fileHandleForReading.readabilityHandler = { [weak self] handle in
             let data = handle.availableData
             guard !data.isEmpty else { handle.readabilityHandler = nil; return }
-            Task { @MainActor in self?.receive(data) }
+            DispatchQueue.main.async { MainActor.assumeIsolated { self?.receive(data) } }
         }
         err.fileHandleForReading.readabilityHandler = { [weak self] handle in
             let data = handle.availableData
             guard !data.isEmpty else { handle.readabilityHandler = nil; return }
-            Task { @MainActor in self?.receiveError(data) }
+            DispatchQueue.main.async { MainActor.assumeIsolated { self?.receiveError(data) } }
         }
         process.terminationHandler = { [weak self] process in
             let code = process.terminationStatus
@@ -61,12 +67,15 @@ public final class ClaudeProcess {
             }
         }
         try process.run()
+        // A write to a claude that just died must fail with an error, not kill Sidekick with SIGPIPE.
+        _ = fcntl(stdin.fileHandleForWriting.fileDescriptor, F_SETNOSIGPIPE, 1)
     }
 
     /// Sends one user message. The answer streams back through `onEvent`.
     public func send(_ text: String) {
         guard isAlive else { return }
         state = .busy
+        stderrTail = ""
         write(ClaudeConfig.userMessage(text))
     }
 
@@ -86,8 +95,14 @@ public final class ClaudeProcess {
             if process.isRunning { process.terminate() }
         }
         DispatchQueue.global().asyncAfter(deadline: .now() + 3) {
-            if process.isRunning { kill(process.processIdentifier, SIGKILL) }
+            if process.isRunning { Darwin.kill(process.processIdentifier, SIGKILL) }
         }
+    }
+
+    /// Ends the process now. For quitting: timers would never fire after the app exits.
+    public func kill() {
+        try? stdin.fileHandleForWriting.close()
+        if process.isRunning { process.terminate() }
     }
 
     public var processIdentifier: Int32 { process.processIdentifier }

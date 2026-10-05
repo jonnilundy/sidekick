@@ -18,6 +18,8 @@ public final class Conversation {
         public var status = Status.running
         /// What claude is doing right now, for example "Searching the web: swift 6 release date".
         public var activity: String?
+        /// Shown above the question, for example when this turn starts a new session.
+        public var notice: String?
     }
 
     public private(set) var turns: [Turn] = []
@@ -42,6 +44,8 @@ public final class Conversation {
     @ObservationIgnored private var session: ClaudeProcess?
     @ObservationIgnored private var spare: ClaudeProcess?
     @ObservationIgnored private var stopRequested = false
+    /// The session died or was replaced mid-conversation; the next turn says so.
+    @ObservationIgnored private var sessionLost = false
     @ObservationIgnored private var nextID = 0
 
     public struct SetupError: Error, Equatable {
@@ -58,8 +62,9 @@ public final class Conversation {
     public var sessionProcessID: Int32? { session?.isAlive == true ? session?.processIdentifier : nil }
 
     /// Starts a spare process when there is none, or replaces one that is old, dead or out of date.
+    /// Not while a session is live: one claude at a time is enough.
     public func prewarm() {
-        guard keepWarm else { return }
+        guard keepWarm, session?.isAlive != true else { return }
         guard case .success(let config) = makeConfig() else { return }
         if let spare, spare.isAlive, spare.config == config, Date().timeIntervalSince(spare.startedAt) < warmMaxAge {
             return
@@ -68,29 +73,55 @@ public final class Conversation {
         spare = launch(config)
     }
 
+    /// Turns the spare on or off. Off stops the waiting process at once.
+    public func setKeepWarm(_ on: Bool) {
+        keepWarm = on
+        if on {
+            prewarm()
+        } else {
+            spare?.stop()
+            spare = nil
+        }
+    }
+
     public func ask(_ raw: String) {
         let text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, !isRunning else { return }
         setupProblem = nil
         if turns.isEmpty { startedAt = Date() }
         nextID += 1
-        turns.append(Turn(id: nextID, question: text))
+        var turn = Turn(id: nextID, question: text)
 
-        if session?.isAlive != true {
-            switch makeConfig() {
-            case .failure(let error):
-                setupProblem = error.message
-                finish(.failed(error.message))
-                return
-            case .success(let config):
-                if let spare, spare.isAlive, spare.config == config {
-                    session = spare
-                } else {
-                    spare?.stop()
-                    session = launch(config)
-                }
-                spare = nil
+        let config: ClaudeConfig
+        switch makeConfig() {
+        case .failure(let error):
+            turns.append(turn)
+            setupProblem = error.message
+            finish(.failed(error.message))
+            return
+        case .success(let current):
+            config = current
+        }
+        // The live session goes when it died, when settings changed, or when it is still busy with a
+        // turn it never finished (a stop claude did not honor). Earlier turns are then not remembered.
+        if let live = session, !live.isAlive || !live.config.sameSettings(as: config) || live.state == .busy {
+            if live.isAlive && !live.config.sameSettings(as: config) { turn.notice = "Settings changed. New session: earlier questions are not remembered." }
+            else if !turns.isEmpty { turn.notice = "New session: earlier questions are not remembered." }
+            endSession()
+        } else if session == nil, sessionLost, !turns.isEmpty {
+            turn.notice = "New session: earlier questions are not remembered."
+        }
+        sessionLost = false
+        turns.append(turn)
+
+        if session == nil {
+            if let spare, spare.isAlive, spare.config == config {
+                session = spare
+            } else {
+                spare?.stop()
+                session = launch(config)
             }
+            spare = nil
         }
         guard let session else {
             finish(.failed(setupProblem ?? "Claude did not start."))
@@ -109,20 +140,25 @@ public final class Conversation {
         guard isRunning else { return }
         stopRequested = true
         session?.interrupt()
-        // If claude does not confirm quickly, end the turn anyway so the panel never hangs.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
+        // If claude does not confirm quickly, end the turn anyway so the panel never hangs. That session
+        // may still be mid-turn, so it is ended too; its late output must not leak into the next answer.
+        DispatchQueue.main.asyncAfter(deadline: .now() + stopGrace) { [weak self] in
             MainActor.assumeIsolated {
                 guard let self, self.isRunning, self.stopRequested else { return }
+                self.endSession()
+                self.sessionLost = true
                 self.finish(.stopped)
             }
         }
     }
 
+    /// How long a stop waits for claude to confirm before the session is replaced.
+    @ObservationIgnored public var stopGrace: TimeInterval = 2
+
     /// Forgets the conversation and ends its session. A fresh spare starts for the next one.
     public func reset() {
-        session?.onEvent = nil
-        session?.stop()
-        session = nil
+        endSession()
+        sessionLost = false
         turns = []
         startedAt = nil
         setupProblem = nil
@@ -142,10 +178,16 @@ public final class Conversation {
     /// Ends every process. For quitting.
     public func shutdown() {
         session?.onEvent = nil
-        session?.stop()
-        spare?.stop()
+        session?.kill()
+        spare?.kill()
         session = nil
         spare = nil
+    }
+
+    private func endSession() {
+        session?.onEvent = nil
+        session?.stop()
+        session = nil
     }
 
     private func launch(_ config: ClaudeConfig) -> ClaudeProcess? {
@@ -161,7 +203,7 @@ public final class Conversation {
 
     private func handle(_ event: StreamEvent?, from session: ClaudeProcess) {
         guard isRunning, let index = turns.indices.last else {
-            if event == nil { self.session = nil }
+            if event == nil { self.session = nil; sessionLost = true }
             return
         }
         switch event {
@@ -185,6 +227,7 @@ public final class Conversation {
             }
         case nil:
             self.session = nil
+            sessionLost = true
             let code: Int32 = if case .exited(let code) = session.state { code } else { -1 }
             finish(.failed(Self.clean(session.stderrTail) ?? "Claude quit (exit \(code))."))
         }

@@ -8,6 +8,7 @@ The lines it prints have the same shape as the real CLI (2.1.x). What it does de
   "fail"   ends the turn with is_error and a message
   "crash"  writes to stderr and exits 2
   "long"   a long markdown answer (list, code block, table)
+  "stubborn" streams slowly and ignores interrupts (a claude stuck in a tool)
   other    "Echo: <question> (turn N)"
 FAKE_CLAUDE_LOG, when set, gets one line with the arguments and one per message.
 FAKE_CLAUDE_DELAY scales every pause (default 1).
@@ -99,6 +100,13 @@ def answer(question, turn):
         text_block(1, ["Swift 6.4 ", "shipped ", "in 2026."])
         result("Swift 6.4 shipped in 2026.")
         return
+    if "stubborn" in q:
+        stream({"type": "content_block_start", "index": 0, "content_block": {"type": "text", "text": ""}})
+        for i in range(30):
+            stream({"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": f"late{i} "}})
+            pause(0.1)
+        result("stubborn done")
+        return
     if "slow" in q:
         words = [f"word{i} " for i in range(40)]
         text_block(0, words, gap=0.08)
@@ -120,6 +128,7 @@ def answer(question, turn):
 
 def main():
     log("args " + json.dumps(sys.argv[1:]) + " cwd " + os.getcwd())
+    log("env " + " ".join(k for k in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "CLAUDECODE") if k in os.environ))
     # Real claude runs SessionStart hooks before the first message arrives.
     emit({"type": "system", "subtype": "hook_started", "hook_name": "SessionStart:startup"})
     turn = 0

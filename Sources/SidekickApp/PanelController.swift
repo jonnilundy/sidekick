@@ -97,7 +97,8 @@ final class PanelController {
     /// Brings the card in from the right edge and puts the cursor in the text field.
     /// `focus: false` shows it without taking the keyboard (an answer arriving while you work elsewhere).
     func show(focus: Bool = true) {
-        if !wantsShown, dailyResetEnabled(), model.conversation.resetIfDue() {
+        // Only when the user opens it: an answer arriving at 5:01 must not be wiped on its way in.
+        if focus, !wantsShown, dailyResetEnabled(), model.conversation.resetIfDue() {
             model.input = ""
         }
         model.conversation.prewarm()

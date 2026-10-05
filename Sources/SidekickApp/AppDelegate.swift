@@ -40,12 +40,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let base = ProcessInfo.processInfo.environment
         DispatchQueue.global(qos: .userInitiated).async {
             let env = ShellEnvironment.load(base: base)
+            let fallback = ShellEnvironment.lastFallbackReason
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
+                    if let fallback { self.log.error("login shell environment not loaded: \(fallback, privacy: .public)") }
                     self.environment = env
                     apply(env)
-                    self.conversation.keepWarm = self.defaults.bool(forKey: Preferences.Key.keepWarm)
-                    self.conversation.prewarm()
+                    self.conversation.setKeepWarm(self.defaults.bool(forKey: Preferences.Key.keepWarm))
                 }
             }
         }
@@ -74,7 +75,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         if !defaults.bool(forKey: Preferences.Key.didFirstRun) {
             defaults.set(true, forKey: Preferences.Key.didFirstRun)
-            if !LaunchAtLogin.isEnabled { _ = try? LaunchAtLogin.setEnabled(true) }
+            // Only from an installed copy: a first run from Downloads or a disk image would register
+            // the wrong path. The Settings toggle shows the real state either way.
+            let path = Bundle.main.bundlePath
+            if !LaunchAtLogin.isEnabled, path.hasPrefix("/Applications/") || path.hasPrefix(NSHomeDirectory() + "/Applications/") {
+                do { try LaunchAtLogin.setEnabled(true) } catch { log.error("open at login failed: \(error.localizedDescription, privacy: .public)") }
+            }
             model.showWelcome = true
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in self?.panel.show() }
         }
@@ -82,9 +88,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     override nonisolated func observeValue(forKeyPath keyPath: String?, of object: Any?, change: [NSKeyValueChangeKey: Any]?, context: UnsafeMutableRawPointer?) {
-        MainActor.assumeIsolated {
-            conversation.keepWarm = defaults.bool(forKey: Preferences.Key.keepWarm)
-            if conversation.keepWarm { conversation.prewarm() }
+        // KVO can arrive on any thread (a `defaults write` from Terminal), so hop to main first.
+        DispatchQueue.main.async {
+            MainActor.assumeIsolated {
+                self.conversation.setKeepWarm(self.defaults.bool(forKey: Preferences.Key.keepWarm))
+            }
         }
     }
 

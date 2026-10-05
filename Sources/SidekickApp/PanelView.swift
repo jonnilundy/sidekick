@@ -120,6 +120,12 @@ struct TurnView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
+            if let notice = turn.notice {
+                Label(notice, systemImage: "arrow.counterclockwise")
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(.tertiary)
+                    .padding(.bottom, 2)
+            }
             Text(turn.question)
                 .font(.system(size: 12.5, weight: .medium))
                 .foregroundStyle(.secondary)

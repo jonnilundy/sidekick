@@ -34,6 +34,13 @@ public struct ClaudeConfig: Equatable, Sendable {
         self.environment = environment
     }
 
+    /// Same user-facing settings (claude, folder, model, effort, prompt). The environment is left out:
+    /// it changes once when the login shell loads, and that alone is no reason to end a session.
+    public func sameSettings(as other: ClaudeConfig) -> Bool {
+        executable == other.executable && workingDirectory == other.workingDirectory && model == other.model
+            && effort == other.effort && systemPrompt == other.systemPrompt
+    }
+
     /// One long-lived print session: messages go in on stdin as stream-json, events come out the same way.
     /// Nothing is saved to disk, so the conversation is gone when the process ends.
     public var arguments: [String] {
