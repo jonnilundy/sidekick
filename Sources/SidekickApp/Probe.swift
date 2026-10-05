@@ -290,7 +290,9 @@ final class Probe: NSObject, NSApplicationDelegate {
         check(!panel.ignoresMouseEvents, "the card itself takes clicks")
 
         // Typing until the field wraps to a second line, recorded in both appearances (plan 010 row 7).
-        for appearance in [NSAppearance.Name.aqua, .darkAqua] {
+        // It adds about 25 s, so it runs only on request: SIDEKICK_PROBE_WRAP=1 scripts/vm-test.sh.
+        let wrapTakes = ProcessInfo.processInfo.environment["SIDEKICK_PROBE_WRAP"] != nil
+        for appearance in wrapTakes ? [NSAppearance.Name.aqua, .darkAqua] : [] {
             NSApp.appearance = NSAppearance(named: appearance)
             await pause(0.3)
             let name = appearance == .aqua ? "wrap-light" : "wrap-dark"

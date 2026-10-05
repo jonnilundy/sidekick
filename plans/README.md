@@ -26,4 +26,4 @@ Every plan: run `scripts/test.sh` after it (expect `CHECKS PASS`). After the las
 
 | # | Title | Severity | Status |
 | --- | --- | --- | --- |
-| 010 | [break-ui fixes](010-break-ui-fixes.md) | mixed | TODO, waiting for Jonni |
+| 010 | [break-ui fixes](010-break-ui-fixes.md) | mixed | DONE |

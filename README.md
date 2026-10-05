@@ -43,6 +43,7 @@ Needs macOS 15 and Swift 6 (Xcode or its Command Line Tools). The script builds 
 | ⌘N, or the ↺ button | Reset: start a fresh session |
 | ⌘. | Stop the answer |
 | ⇧⌘C | Copy the last answer |
+| ⌘↓ / ⌘↑ | Show or hide earlier questions |
 | ⌘, or right click ✦ | Settings |
 
 - **One session all day.** Follow-ups know the earlier questions. It starts fresh at 5 AM, or whenever you press ⌘N.

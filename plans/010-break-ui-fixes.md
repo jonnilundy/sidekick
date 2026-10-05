@@ -1,6 +1,6 @@
 # 010 — break-ui fixes
 
-- **Status**: TODO, waiting for Jonni to kick off
+- **Status**: DONE 2026-10-05. Rows 1 to 6 and 8 fixed. Row 7 not reproduced in 10 recorded wraps, field unchanged; rerun with `SIDEKICK_PROBE_WRAP=1 scripts/vm-test.sh` if it shows again. Row 6 hides `**`, `~~` and backticks, not a lone `*`.
 - **Source**: the break-ui pass of 2026-10-05 (`scripts/vm-run.sh 'scripts/vm-test.sh worst'`)
 - **Severity**: mixed, worst first below
 
