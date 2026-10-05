@@ -21,3 +21,9 @@ Run them in this order: 009, 001, 006, 007, 008, 002, 003, 004, 005.
 - 004 and 005 both edit `PanelCard` in `Sources/SidekickApp/PanelView.swift`, in different functions.
 
 Every plan: run `scripts/test.sh` after it (expect `CHECKS PASS`). After the last plan: `scripts/build-app.sh`, then `VM_DIR=sidekick-motion scripts/vm-run.sh` (expect `PROBE PASS`). Never run the app on Jonni's Mac; windows run only in the VM.
+
+## Later
+
+| # | Title | Severity | Status |
+| --- | --- | --- | --- |
+| 010 | [break-ui fixes](010-break-ui-fixes.md) | mixed | TODO, waiting for Jonni |

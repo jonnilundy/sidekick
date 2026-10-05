@@ -1,4 +1,4 @@
-<p align="center"><img src="assets/screenshot-dark.png" alt="Sidekick's black card under the menu bar at the top right of a Mac screen. Two questions in tinted bubbles: the time difference between San Francisco and Tokyo, answered as 16 hours ahead with three bullets, and the best time for a call, answered with a small table" width="560"></p>
+<p align="center"><img src="assets/screenshot-dark.png" alt="Sidekick's black card under the menu bar at the top right of a Mac screen, on a dark wallpaper. A question about the time difference between San Francisco and Tokyo sits in a tinted bubble, answered as 16 hours ahead with three short bullets" width="720"></p>
 
 # Sidekick
 
@@ -33,9 +33,7 @@ Needs macOS 15 and Swift 6 (Xcode or its Command Line Tools). The script builds 
 
 ## Usage
 
-<img src="assets/demo.gif" alt="Option Command Space slides a compact field in from the right edge. A question about the time difference between San Francisco and Tokyo is typed; the card unfolds, the question flies into a bubble, a short web search shows, and the answer streams in with three bullets. A follow-up adds a small table. Escape slides the card away. Reopened later, it is just the field again, and dragging its bottom edge down brings the earlier questions back." width="100%">
-
-[Watch it as a video (MP4)](assets/demo.mp4)
+<img src="assets/demo.gif" alt="Option Command Space slides a compact field in from the right edge. A question about the time difference between San Francisco and Tokyo is typed; the card unfolds, the question flies into a bubble, a short web search shows, and the answer streams in with three bullets. Escape slides the card away. Reopened later, it is just the field again, and dragging its bottom edge down brings the earlier question back." width="100%">
 
 | Do this | To |
 | --- | --- |
@@ -62,14 +60,6 @@ Needs macOS 15 and Swift 6 (Xcode or its Command Line Tools). The script builds 
 - **Keep Claude ready.** One `claude` process waits in the background, so the first answer starts about 2 seconds sooner.
 - **Open at login.**
 - **Updates.** Your version, Check Now, and Check for updates automatically (on by default).
-
-## Updates
-
-Sidekick updates itself with [Sparkle](https://sparkle-project.org). It checks once a day.
-
-- A found update never opens a window or takes the keyboard. A dot appears on ✦, and its right click menu gets **Update to Sidekick X.Y.Z…** at the top.
-- That item, **Check for Updates…** in the same menu, or Check Now in Settings opens Sparkle's window with the release notes and Install Update.
-- Every update is a zip on this repo's GitHub releases, signed with an EdDSA key. Sidekick installs only zips that match the public key in its Info.plist.
 
 ## How it works
 
