@@ -12,10 +12,11 @@ public struct Spring: Equatable, Sendable {
         self.damping = damping
     }
 
-    /// The panel arriving from the edge: a little bounce, as asked for.
-    public static let arrive = Spring(response: 0.42, damping: 0.74)
-    /// The panel leaving: quick and calm, no overshoot.
-    public static let leave = Spring(response: 0.3, damping: 1)
+    /// The panel arriving from the edge: quick, with a hint of bounce. It opens from a hotkey many
+    /// times a day, so it settles in about 0.4 s.
+    public static let arrive = Spring(response: 0.30, damping: 0.86)
+    /// The panel leaving: faster than it came, no overshoot.
+    public static let leave = Spring(response: 0.22, damping: 1)
     /// Height changes while an answer streams in.
     public static let grow = Spring(response: 0.32, damping: 1)
     /// Opacity, always critically damped.

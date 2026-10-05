@@ -236,8 +236,8 @@ do {
     var frames = 0
     while !x.isSettled && frames < 600 { x.step(1.0 / 120); peak = max(peak, x.value); frames += 1 }
     check(x.value == 100, "arrive spring settles on target")
-    check(peak > 100.5 && peak < 112, "arrive spring overshoots a little", "peak \(peak)")
-    check(Double(frames) / 120 < 1.2, "arrive spring settles within 1.2 s", "\(Double(frames) / 120)")
+    check(peak > 100.05 && peak < 103, "arrive spring overshoots a hint", "peak \(peak)")
+    check(Double(frames) / 120 < 0.8, "arrive spring settles within 0.8 s", "\(Double(frames) / 120)")
 
     var y = SpringValue(0, spring: .leave)
     y.target = 100
