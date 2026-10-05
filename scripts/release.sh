@@ -16,7 +16,7 @@
 # Refuses to run while SUPublicEDKey in Resources/Info.plist is the placeholder, when the key in
 # 1Password is missing, or when that key does not match SUPublicEDKey.
 #
-# The key: item "Sidekick Sparkle EdDSA key", field password, vault "Iris Agi", read with the
+# The key: item "Sidekick Sparkle EdDSA key" (an API Credential), field credential, vault "Iris Agi", read with the
 # service account (OP_SERVICE_ACCOUNT_TOKEN). SIDEKICK_KEY_REF points at another copy. It is base64
 # of a 32 byte Ed25519 seed, made once with OpenSSL 3:
 #   seed=$(openssl genpkey -algorithm ed25519 | openssl pkey -outform DER | tail -c 32 | base64)
@@ -31,7 +31,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-KEY_REF="${SIDEKICK_KEY_REF:-op://Iris Agi/Sidekick Sparkle EdDSA key/password}"
+KEY_REF="${SIDEKICK_KEY_REF:-op://Iris Agi/Sidekick Sparkle EdDSA key/credential}"
 REPO="jonnilundy/sidekick"
 PLACEHOLDER="REPLACE-WITH-PUBLIC-KEY"
 SPARKLE_BIN="$ROOT/.build/artifacts/sparkle/Sparkle/bin"

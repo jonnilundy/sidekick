@@ -157,7 +157,9 @@ final class Updater: NSObject {
             MainActor.assumeIsolated {
                 guard let self else { return }
                 let available = self.state.available.map { "\($0.version) build \($0.build) ready \($0.ready)" } ?? "none"
-                let windows = NSApp.windows.filter(\.isVisible).map(\.title).filter { !$0.isEmpty }
+                // The menu bar icon's own window (NSStatusBarWindow, "Item-0") is always there; leave it out.
+                let windows = NSApp.windows.filter { $0.isVisible && !String(describing: type(of: $0)).contains("StatusBar") }
+                    .map(\.title).filter { !$0.isEmpty }
                 self.log.notice("test hook: state available \(available, privacy: .public), result \(self.state.lastResult, privacy: .public), visible windows \(windows, privacy: .public), active \(NSApp.isActive, privacy: .public)")
             }
         })

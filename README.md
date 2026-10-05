@@ -40,6 +40,17 @@ After 3 minutes without activity, the panel opens as just the empty field, half 
 - **Start fresh every day at 5 AM.** On by default.
 - **Keep Claude ready.** One claude process waits in the background, so the first answer starts about 2 seconds sooner.
 - **Open at login.**
+- **Updates.** Your version, Check Now with the result of the last check, and Check for updates automatically (on by default).
+
+## Updates
+
+Sidekick updates itself with [Sparkle](https://sparkle-project.org). It checks once a day, plus right after launch when a check is due.
+
+- A found update never opens a window or takes the keyboard. A dot appears on ✦ in the menu bar, and the right-click menu gets **Update to Sidekick X.Y.Z…** at the top.
+- That item, **Check for Updates…** in the same menu, or Check Now in Settings opens Sparkle's window: the release notes, then Install Update, the download, and Install and Relaunch.
+- If you tick "Automatically download and install updates" in that window, later updates download in the background. The menu item then says **Install Sidekick X.Y.Z and Relaunch** and installs at once. An update that is not installed by hand installs when Sidekick quits.
+
+The feed is `appcast.xml` at the root of this repo, read from `main`. The zips are on the repo's GitHub releases. Every zip is signed with an EdDSA key, and Sidekick installs only zips that match the public key in its Info.plist. `scripts/release.sh` makes a release (see [AGENTS.md](AGENTS.md)).
 
 ## How it works
 

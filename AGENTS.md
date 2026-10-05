@@ -13,14 +13,17 @@ A native macOS quick-answer panel (SwiftPM, macOS 15+, Swift 6.4) that runs the 
 
 | Script | What it does | Safe on Jonni's Mac |
 | --- | --- | --- |
-| `scripts/test.sh` | Checks (144, about 13 s) and a compile of the app | Yes |
+| `scripts/test.sh` | Checks (171, about 11 s) and a compile of the app | Yes |
 | `scripts/test.sh --vm` | Then builds the app and runs the window probe in the VM | Yes (the window part runs in the VM) |
 | `$(swift build --show-bin-path)/sidekick-checks --live` | One real question through the real claude. Costs a few cents | Yes, no windows |
 | `scripts/build-app.sh` | Release build into `build/Sidekick.app`, ad hoc signed | Yes |
 | `scripts/vm-run.sh 'scripts/vm-test.sh worst'` | The break-ui pass: worst-case questions and answers (long paste, empty, blank, error, a 34K answer, 40 turns), screenshots and main-thread stall timings | Yes |
 | `scripts/vm-run.sh ['cmd']` | Syncs the repo and the built app to the Tart VM on iris-agi and runs `scripts/vm-test.sh` (or `cmd`). Results land in `build/vm-out/` | Yes |
 | `scripts/install.sh` | Builds, quits the running copy, installs to `/Applications`, starts it | Installs the real app |
-| `scripts/release.sh X.Y.Z [--publish]` | Bumps the version, tests, zips; with `--publish` tags and creates a GitHub release | Dry run by default |
+| `scripts/release.sh X.Y.Z [--publish]` | Bumps the version, tests, builds, zips, signs the zip with the Sparkle key from 1Password and puts it first in `appcast.xml`. A dry run undoes the bump and keeps `build/appcast-preview.xml`; `--publish` commits, tags, pushes and creates the GitHub release | Dry run by default |
+| `scripts/update-test.sh` | End to end update test: builds a 0.0.1 and a 0.0.2 test copy (bundle id `com.jonnilundy.sidekick.updatetest`, throwaway key, feed on `127.0.0.1:8765`), then runs `scripts/vm-update-test.sh` in the VM: gentle reminder with no window, Sparkle's window from the menu item's code path, silent download, install and relaunch. Prints `UPDATE TEST PASS: n checks` | Yes (runs in the VM) |
+| `scripts/appcast-add.sh` | Puts one release first in an appcast (release.sh and the checks run it) | Yes |
+| `swift scripts/ed-public-key.swift` | Reads a Sparkle private key on stdin, prints its public key (the `SUPublicEDKey` value) | Yes |
 | `swift scripts/make-icon.swift [--sheet]` | Draws `assets/AppIcon.icns` (style `paper`), or a sheet of all styles | Yes |
 
 ## Test rules
@@ -43,3 +46,6 @@ A native macOS quick-answer panel (SwiftPM, macOS 15+, Swift 6.4) that runs the 
 - claude in stream-json mode runs SessionStart hooks before the first message and sends `system/init` only after it. Any `system` line counts as "process is up".
 - An interrupt (`control_request` subtype `interrupt`) ends the turn with `is_error: true` and `result: null`; the session survives.
 - The built app needs `KeyboardShortcuts_KeyboardShortcuts.bundle` in `Contents/Resources`, or it stops at launch.
+- Updates: Sparkle.framework goes into `Contents/Frameworks` and is signed inside out (build-app.sh). A scheduled check never shows a window (`standardUserDriverShouldHandleShowingScheduledUpdate` returns false); it sets `UpdateState.available`, which draws the badge and the menu item. `SUPublicEDKey` set to `REPLACE-WITH-PUBLIC-KEY` keeps the updater off. The signing key is `op://Iris Agi/Sidekick Sparkle EdDSA key/credential`; a lost key means installed copies cannot update.
+- Test copies (any bundle id but the release one) listen for the distributed notifications `<id>.install-update` and `<id>.dump-update-state`. The menu bar icon has its own window (`NSStatusBarWindow`, title "Item-0"); the state dump leaves it out.
+- In the VM test scripts (zsh), `log` is a zsh builtin. Use `/usr/bin/log stream`. The test feed's Python server brings up a "find devices on local networks" prompt in the VM; it is noise in the screenshots.

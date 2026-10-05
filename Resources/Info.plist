@@ -37,7 +37,7 @@
 	<key>SUFeedURL</key>
 	<string>https://raw.githubusercontent.com/jonnilundy/sidekick/main/appcast.xml</string>
 	<key>SUPublicEDKey</key>
-	<string>REPLACE-WITH-PUBLIC-KEY</string>
+	<string>e+H2XZ7eowRoCcUzx9WFYKxFzjQYeyAAnqofp6xRkGg=</string>
 	<key>SUScheduledCheckInterval</key>
 	<integer>86400</integer>
 </dict>
