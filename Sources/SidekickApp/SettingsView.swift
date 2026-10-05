@@ -16,8 +16,11 @@ struct SettingsView: View {
     @State private var launchAtLogin = LaunchAtLogin.isEnabled
     @State private var loginNote: String?
 
-    init(defaults: UserDefaults) {
+    let updater: Updater?
+
+    init(defaults: UserDefaults, updater: Updater? = nil) {
         self.defaults = defaults
+        self.updater = updater
         _folder = AppStorage(wrappedValue: Preferences.defaultFolder(), Preferences.Key.folder, store: defaults)
         _model = AppStorage(wrappedValue: "", Preferences.Key.model, store: defaults)
         _effort = AppStorage(wrappedValue: "low", Preferences.Key.effort, store: defaults)
@@ -76,7 +79,9 @@ struct SettingsView: View {
                 Text(loginNote).font(.callout).foregroundStyle(.secondary)
             }
 
-            Text("Sidekick \(SidekickVersion) runs your claude command with your own settings, skills and connectors. Conversations are never saved.")
+            UpdateRows(updater: updater)
+
+            Text("Sidekick runs your claude command with your own settings, skills and connectors. Conversations are never saved.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -95,6 +100,40 @@ struct SettingsView: View {
         open.prompt = "Use Folder"
         if open.runModal() == .OK, let url = open.url {
             folder = url.path
+        }
+    }
+}
+
+/// The version, Check Now with the last check, and the automatic check toggle.
+struct UpdateRows: View {
+    let updater: Updater?
+    @State private var automatic: Bool
+
+    init(updater: Updater?) {
+        self.updater = updater
+        _automatic = State(initialValue: updater?.automaticallyChecks ?? false)
+    }
+
+    var body: some View {
+        let (version, build) = Updater.bundleVersion
+        if let updater, updater.state.running {
+            let state = updater.state
+            LabeledContent {
+                Button("Check Now") { updater.checkForUpdates() }
+                    .disabled(state.checking)
+            } label: {
+                Text(UpdateRules.versionLabel(version: version, build: build))
+                Text(UpdateRules.lastCheckLabel(date: state.lastCheck, result: state.lastResult, checking: state.checking))
+            }
+            Toggle("Check for updates automatically", isOn: $automatic)
+                .onChange(of: automatic) { _, on in updater.automaticallyChecks = on }
+        } else {
+            LabeledContent {
+                EmptyView()
+            } label: {
+                Text(UpdateRules.versionLabel(version: version, build: build))
+                Text(updater?.state.lastResult.isEmpty == false ? updater!.state.lastResult : "Updates are off in this build")
+            }
         }
     }
 }

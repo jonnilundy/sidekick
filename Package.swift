@@ -11,6 +11,8 @@ let package = Package(
         .executable(name: "sidekick-checks", targets: ["sidekick-checks"]),
     ],
     dependencies: [
+        // Updates: the appcast at the repo root, EdDSA signed zips on GitHub releases. MIT.
+        .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.0.0"),
         // Global shortcut through Carbon hot keys (no Accessibility permission) and the recorder in Settings. MIT.
         .package(url: "https://github.com/sindresorhus/KeyboardShortcuts", from: "3.0.0"),
     ],
@@ -22,6 +24,7 @@ let package = Package(
             name: "SidekickApp",
             dependencies: [
                 "SidekickCore",
+                .product(name: "Sparkle", package: "Sparkle"),
                 .product(name: "KeyboardShortcuts", package: "KeyboardShortcuts"),
             ]
         ),

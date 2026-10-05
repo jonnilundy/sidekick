@@ -14,6 +14,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var settingsWindow: NSWindow?
     private var environment: [String: String]
     private var warmTimer: Timer?
+    private var updater: Updater?
     private let log = Logger(subsystem: SidekickBundleID, category: "app")
     /// Probe runs skip the status item, the hotkey and login items.
     let isProbe: Bool
@@ -64,6 +65,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         guard !isProbe else { return }
         setUpStatusItem()
+        let updater = Updater()
+        updater.state.onAvailableChange = { [weak self] in self?.updateStatusIcon(visible: self?.panel.isVisible ?? false) }
+        updater.start()
+        self.updater = updater
         KeyboardShortcuts.onKeyDown(for: .togglePanel) { [weak self] in self?.panel.toggle() }
         // Keep the spare fresh: replace it when it gets old or settings changed.
         warmTimer = Timer.scheduledTimer(withTimeInterval: 5 * 60, repeats: true) { [weak self] _ in
@@ -115,14 +120,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem = item
     }
 
-    private func statusImage(active: Bool) -> NSImage? {
-        let image = NSImage(systemSymbolName: "sparkle", accessibilityDescription: "Sidekick")
+    private func statusImage(active: Bool, badge: Bool = false) -> NSImage? {
+        let image = NSImage(systemSymbolName: "sparkle", accessibilityDescription: "Sidekick")?
+            .withSymbolConfiguration(.init(pointSize: 14, weight: active ? .bold : .medium))
         image?.isTemplate = true
-        return image?.withSymbolConfiguration(.init(pointSize: 14, weight: active ? .bold : .medium))
+        guard badge, let image else { return image }
+        // A found update: a small dot at the top right, drawn into the template so it follows the menu bar's color.
+        let size = NSSize(width: image.size.width + 3, height: image.size.height)
+        let badged = NSImage(size: size, flipped: false) { _ in
+            image.draw(in: NSRect(x: 0, y: 0, width: image.size.width, height: image.size.height))
+            NSBezierPath(ovalIn: NSRect(x: size.width - 6, y: size.height - 6, width: 6, height: 6)).fill()
+            return true
+        }
+        badged.isTemplate = true
+        badged.accessibilityDescription = "Sidekick, update available"
+        return badged
     }
 
     private func updateStatusIcon(visible: Bool) {
-        statusItem?.button?.image = statusImage(active: visible)
+        statusItem?.button?.image = statusImage(active: visible, badge: updater?.state.available != nil)
     }
 
     @objc private func statusClicked(_ sender: NSStatusBarButton) {
@@ -136,6 +152,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func showMenu() {
         let menu = NSMenu()
+        if let updater, updater.state.running, let available = updater.state.available {
+            menu.addItem(withTitle: UpdateRules.menuTitle(version: available.version, ready: available.ready),
+                         action: #selector(installUpdateFromMenu), keyEquivalent: "").target = self
+            menu.addItem(.separator())
+        }
         let shortcut = KeyboardShortcuts.getShortcut(for: .togglePanel)?.description
         menu.addItem(withTitle: shortcut.map { "Ask  \($0)" } ?? "Ask", action: #selector(askFromMenu), keyEquivalent: "").target = self
         let newItem = menu.addItem(withTitle: "Reset Session", action: #selector(newFromMenu), keyEquivalent: "")
@@ -143,6 +164,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         newItem.isEnabled = !conversation.isEmpty
         menu.addItem(.separator())
         menu.addItem(withTitle: "Settings…", action: #selector(settingsFromMenu), keyEquivalent: ",").target = self
+        if let updater, updater.state.running {
+            let check = menu.addItem(withTitle: "Check for Updates…", action: #selector(checkForUpdatesFromMenu), keyEquivalent: "")
+            check.target = self
+            check.isEnabled = updater.canCheck
+        }
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit Sidekick", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         statusItem?.menu = menu
@@ -153,12 +179,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func askFromMenu() { panel.show() }
     @objc private func newFromMenu() { panel.newConversation(); panel.show() }
     @objc private func settingsFromMenu() { openSettings() }
+    @objc private func installUpdateFromMenu() { panel.hide(); updater?.installUpdate() }
+    @objc private func checkForUpdatesFromMenu() { panel.hide(); updater?.checkForUpdates() }
 
     // MARK: Settings
 
     func openSettings() {
         if settingsWindow == nil {
-            let window = NSWindow(contentViewController: NSHostingController(rootView: SettingsView(defaults: defaults)))
+            let window = NSWindow(contentViewController: NSHostingController(rootView: SettingsView(defaults: defaults, updater: updater)))
             window.title = "Sidekick Settings"
             window.styleMask = [.titled, .closable]
             window.isReleasedWhenClosed = false

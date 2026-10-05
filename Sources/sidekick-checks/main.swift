@@ -297,6 +297,10 @@ do {
     check(DailyReset.isDue(sessionStart: at(1, 12), now: at(5, 12), calendar: calendar), "days later: reset")
 }
 
+// MARK: Updates (UpdateChecks.swift)
+
+MainActor.assumeIsolated { updateChecks(root: root) }
+
 // MARK: Conversation against the fake claude
 
 @MainActor
