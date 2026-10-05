@@ -220,6 +220,8 @@ struct DetailsBlock: View {
 
 struct TableBlock: View {
     let rows: [[String]]
+    /// True while columns sit past the right edge: the table is wider than the card and not scrolled to the end.
+    @State private var moreToRight = false
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -238,6 +240,19 @@ struct TableBlock: View {
                 }
             }
             .padding(.vertical, 2)
+        }
+        .onScrollGeometryChange(for: Bool.self) { geometry in
+            geometry.contentSize.width - geometry.containerSize.width - geometry.contentOffset.x > 1
+        } action: { _, hidden in
+            moreToRight = hidden
+        }
+        // A soft edge on the right says there is more. It goes away at the end.
+        .mask(alignment: .leading) {
+            HStack(spacing: 0) {
+                Rectangle()
+                LinearGradient(colors: [.black, .clear], startPoint: .leading, endPoint: .trailing)
+                    .frame(width: moreToRight ? 28 : 0)
+            }
         }
     }
 }
