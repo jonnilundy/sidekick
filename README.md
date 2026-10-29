@@ -14,9 +14,14 @@ Sidekick runs your own `claude` command, so it has your whole setup: your CLAUDE
 
 ## Install
 
+With [Homebrew](https://brew.sh):
+
 ```bash
 brew install jonnilundy/tap/sidekick
+open -a Sidekick
 ```
+
+Homebrew skips the macOS "unidentified developer" prompt. Sidekick updates itself, so you do not need `brew upgrade`. To remove it: `brew uninstall --zap sidekick`.
 
 Or by hand:
 
