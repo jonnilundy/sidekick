@@ -14,6 +14,12 @@ Sidekick runs your own `claude` command, so it has your whole setup: your CLAUDE
 
 ## Install
 
+```bash
+brew install jonnilundy/tap/sidekick
+```
+
+Or by hand:
+
 1. Download `Sidekick-<version>.zip` from the [latest release](https://github.com/jonnilundy/sidekick/releases/latest) and open it.
 2. Drag Sidekick to Applications.
 3. Right click Sidekick in Applications, choose Open, then click Open. macOS asks this once, because the app is not signed with an Apple developer certificate.

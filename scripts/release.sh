@@ -8,7 +8,8 @@
 #   4. Put an item for the zip first in appcast.xml (scripts/appcast-add.sh). Notes come from
 #      release-notes/X.Y.Z.md when present.
 #   5. With --publish: commit, tag, push the tag, create the GitHub release with the zip, push main.
-#      The release goes up before main, so the appcast never points at a missing zip.
+#      The release goes up before main, so the appcast never points at a missing zip. Last, the
+#      Homebrew cask in jonnilundy/homebrew-tap gets the new version and sha256 (scripts/cask-bump.sh).
 #
 # The default is a dry run: steps 1 to 4 run, the appcast as it would be is kept at
 # build/appcast-preview.xml, and the bump and the appcast are undone. It prints the publish commands.
@@ -153,6 +154,7 @@ COMMANDS=(
     "gh release create v$NEW_VERSION build/$ZIP_NAME --repo $REPO --title 'Sidekick $NEW_VERSION' $NOTES_ARG"
     # HEAD, not main: releases run from a worktree on its own branch (code-AGENTS.md).
     "git push -q origin HEAD:main"
+    "scripts/cask-bump.sh $NEW_VERSION build/$ZIP_NAME"
 )
 
 if [[ "$PUBLISH" == "--publish" ]]; then
