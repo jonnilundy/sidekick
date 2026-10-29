@@ -13,7 +13,7 @@ final class PanelModel {
     /// Bumped to put the cursor back in the text field.
     var focusRequest = 0
     /// The tallest the transcript may get before it scrolls.
-    var maxTranscriptHeight: CGFloat = 520
+    var maxTranscriptHeight: CGFloat = PanelMetrics.maxTranscriptHeight
     var reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
     /// The shortcut, for the placeholder ("⌥⌘Space").
     var shortcutHint = ""
@@ -94,5 +94,7 @@ enum PanelMetrics {
     static let top: CGFloat = 8
     static let bottom: CGFloat = 36
     static let cornerRadius: CGFloat = 22
+    /// Long answers scroll inside this height, so the card stays a box in the top right corner.
+    static let maxTranscriptHeight: CGFloat = 520
     static var windowWidth: CGFloat { cardWidth + edgeGap + leading }
 }

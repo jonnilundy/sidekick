@@ -210,7 +210,8 @@ final class PanelController {
     func place(on screen: NSScreen?) {
         guard let screen = screen ?? NSScreen.main else { return }
         let visible = screen.visibleFrame
-        model.maxTranscriptHeight = max(200, visible.height - PanelMetrics.top - PanelMetrics.bottom - 72)
+        let roomOnScreen = max(200, visible.height - PanelMetrics.top - PanelMetrics.bottom - 72)
+        model.maxTranscriptHeight = min(PanelMetrics.maxTranscriptHeight, roomOnScreen)
         let frame = NSRect(x: visible.maxX - PanelMetrics.windowWidth, y: visible.minY,
                            width: PanelMetrics.windowWidth, height: visible.height)
         if panel.frame != frame { panel.setFrame(frame, display: false) }

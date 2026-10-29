@@ -331,6 +331,7 @@ final class Probe: NSObject, NSApplicationDelegate {
         if let screen = panel.screen {
             check(panel.frame.height <= screen.visibleFrame.height, "the panel never outgrows the screen")
         }
+        check(app.panel.cardRect.height <= PanelMetrics.maxTranscriptHeight + 140, "a long answer scrolls inside a capped card", "\(app.panel.cardRect.height)")
 
         // Paste works without a main menu.
         NSPasteboard.general.clearContents()
