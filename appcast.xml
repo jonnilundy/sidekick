@@ -6,6 +6,17 @@
         <description>Sidekick updates</description>
         <language>en</language>
         <item>
+            <title>Version 0.2.2</title>
+            <pubDate>Thu, 29 Oct 2026 17:02:46 +0000</pubDate>
+            <sparkle:version>4</sparkle:version>
+            <sparkle:shortVersionString>0.2.2</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
+            <sparkle:fullReleaseNotesLink>https://github.com/jonnilundy/sidekick/releases/tag/v0.2.2</sparkle:fullReleaseNotesLink>
+            <description sparkle:format="markdown"><![CDATA[- Long answers scroll inside the card. The card stays in the top right corner and no longer grows to the full height of the screen.
+- Install with Homebrew: `brew install jonnilundy/tap/sidekick`.]]></description>
+            <enclosure url="https://github.com/jonnilundy/sidekick/releases/download/v0.2.2/Sidekick-0.2.2.zip" length="2003749" type="application/octet-stream" sparkle:edSignature="18iaanK40dQa2G2z9YpPwYPwOtHc+VNqoCFeWC+V+uvV+WlgOyfMXkhR7h0X4FFrIJJHdzOmQz+nVF3vjpdxAQ=="/>
+        </item>
+        <item>
             <title>Version 0.2.1</title>
             <pubDate>Mon, 05 Oct 2026 21:22:06 +0000</pubDate>
             <sparkle:version>3</sparkle:version>
